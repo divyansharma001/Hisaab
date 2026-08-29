@@ -160,22 +160,42 @@ Every row is a real run on the same records.
 
 | Configuration | Straight-through | Accuracy | Wrong approvals |
 |---|---|---|---|
-| Scoring only | 84.7% | 85.9% | **11** |
+| Scoring only | 82.4% | 83.5% | **11** |
 | + guardrails | 0.0% | 12.9% | 0 |
-| + memory | 71.8% | 98.8% | 0 |
+| + memory | 69.4% | 96.5% | 0 |
 | + LLM adjudicator | **72.9%** | **100%** | 0 |
 
-Two things worth reading off that table.
+Three things worth reading off that table.
 
 **Guardrails without memory reach 0%.** Every customer looks new, so nothing
 can be automated. Guardrails without memory are useless and memory without
 guardrails is pointless — neither number means anything alone.
 
-**The LLM is worth 1.2 points.** Sixteen records land in the band where a model
-could help, but twelve are held by rules it cannot override and three sit
-outside the date window. Exactly one is a correct match it can win, and it wins
-it. So the whole batch takes **one** LLM call, because the hard rules run first
-and the model is only asked when its answer could change the outcome.
+**Memory is the biggest single contribution**, worth 69 points. It is also the
+easiest place to produce a fake number, so a batch can never learn from itself:
+`learn_from` returns a *new* memory rather than changing the one in use, and
+worked examples drawn from the graded records are filtered out of a graded run.
+Improvement only ever shows up in a later run.
+
+**The LLM is worth 3.5 points** for three calls and six paise. The hard rules
+run first, and the model is asked only when its answer could change the
+outcome — sixteen records land in its score band, but most are held by rules it
+cannot override, so we never pay to ask about them.
+
+## Watching it learn
+
+```bash
+docker compose exec api python learn.py
+```
+
+Starts with history for half the customers, runs the batch, has a reviewer
+confirm what was held, and runs again:
+
+```
+Day one   automated 29/85 (34.1%)   40 held as new customer   0 wrong
+Day two   automated 61/85 (71.8%)   +37.6 points              0 wrong
+          32 records resolved that had not before
+```
 
 ---
 

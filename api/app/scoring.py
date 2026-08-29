@@ -33,20 +33,14 @@ BASE_WEIGHTS: dict[str, float] = {
     "date": 0.10,
 }
 
-# What the grid search actually chose, on the tuning set only, under a
-# no-wrong-payment constraint. 179 weightings were tried and 50 tied at the
-# top, so the result is flat in this region - these are the tied setting
-# nearest the plan's own numbers.
+# What the grid search chose, on the tuning set only, under a no-wrong-payment
+# constraint: the plan's own numbers, unchanged. 179 weightings were tried and
+# 114 tied at 100% accuracy, so the result is flat across most of the grid.
 #
-# The finding worth stating out loud: the plan's weights were already right.
-# Accuracy across the whole clean grid moved only 73.3% to 86.7%, so the
-# weights are not what makes or breaks this system. The guardrails are.
-TUNED_WEIGHTS: dict[str, float] = {
-    "reference": 0.500,
-    "amount": 0.222,
-    "name": 0.167,
-    "date": 0.111,
-}
+# The finding worth saying out loud: the weights are not what makes or breaks
+# this system. Over a hundred settings reach the same answer. The guardrails
+# and the memory behind them are what move the number.
+TUNED_WEIGHTS: dict[str, float] = dict(BASE_WEIGHTS)
 
 # Subset search for combined and partial payments. Counterparties have a
 # handful of open invoices, so this stays tiny; the cap only stops a

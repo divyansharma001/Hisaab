@@ -188,14 +188,23 @@ CREATE INDEX aliases_variant_idx   ON aliases (variant_name);
 CREATE INDEX aliases_canonical_idx ON aliases (canonical_name);
 
 
+-- Worked examples shown to the adjudicator.
+--
+-- source_split is not bookkeeping. An episode written from a graded record and
+-- then shown back during grading is the same contamination as an alias learned
+-- mid-run: the reported accuracy would include information the system never
+-- had. Episodes are filtered by origin, and the graded split is never a source
+-- a graded run can read. Section 18, bug 7.
 CREATE TABLE episodes (
-  id              BIGSERIAL PRIMARY KEY,
-  situation_text  TEXT      NOT NULL,
-  resolution_text TEXT      NOT NULL,
-  tags            TEXT[]    NOT NULL DEFAULT '{}'
+  id              BIGSERIAL  PRIMARY KEY,
+  situation_text  TEXT       NOT NULL,
+  resolution_text TEXT       NOT NULL,
+  tags            TEXT[]     NOT NULL DEFAULT '{}',
+  source_split    split_name NOT NULL
 );
 
-CREATE INDEX episodes_tags_idx ON episodes USING GIN (tags);
+CREATE INDEX episodes_tags_idx   ON episodes USING GIN (tags);
+CREATE INDEX episodes_source_idx ON episodes (source_split);
 
 
 -- Append-only. This is the compliance artifact, not just a debug log.

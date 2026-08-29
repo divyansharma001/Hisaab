@@ -14,6 +14,7 @@ from itertools import product
 from app.dataset import Split
 from app.evaluate import Metrics, evaluate, load_truth
 from app.intake import load_batch
+from app.memory import build_from_split
 from app.pipeline import process_batch
 from app.scoring import BASE_WEIGHTS
 
@@ -54,6 +55,11 @@ def search(split: Split = Split.TUNING, grid: dict[str, list[float]] | None = No
     batch = load_batch(split)
     truth = load_truth(split)
 
+    # The same memory a real run gets. Without it the new-counterparty rule
+    # holds every record, every weighting scores identically, and the search
+    # returns a flat line that looks like a result.
+    memory = build_from_split()
+
     seen: set[tuple] = set()
     trials: list[Trial] = []
 
@@ -64,7 +70,7 @@ def search(split: Split = Split.TUNING, grid: dict[str, list[float]] | None = No
             continue
         seen.add(key)
 
-        result = process_batch(batch, weights)
+        result = process_batch(batch, weights, memory)
         trials.append(Trial(weights=weights, metrics=evaluate(result, truth)))
 
     return trials

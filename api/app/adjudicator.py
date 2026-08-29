@@ -126,14 +126,18 @@ the customer. If two candidates both fit, or none does, return null.
 About confidence: it is your own belief that the payment you chose is the right
 one, from 0 to 1. It is not a copy of any score in the input. If one candidate
 has an EXPLAINED amount and a matching customer and the others do not, you are
-confident - say so. If you return null, confidence is 0."""
+confident - say so. If you return null, confidence is 0.
+
+If similar cases settled before are shown, they are worked examples of how
+cases of this shape were decided. Use them for the shape of the reasoning, not
+as answers - the customers and amounts are different."""
 
 
 def build_prompt(
     invoice: NormInvoice,
     candidates: list[Scored],
     memory: Memory,
-    episodes: list[str] | None = None,
+    tags: set[str] | None = None,
 ) -> str:
     """Everything the model needs, and nothing it does not.
 
@@ -173,8 +177,11 @@ def build_prompt(
             "",
         ]
 
-    if episodes:
-        lines += ["SIMILAR CASES RESOLVED BEFORE", *(f"  {e}" for e in episodes), ""]
+    past = memory.episodes_for(tags or set())
+    if past:
+        lines.append("SIMILAR CASES SETTLED BEFORE")
+        for episode in past:
+            lines += [f"  {episode.situation}", f"    -> {episode.resolution}", ""]
 
     lines.append(
         "Which candidate settles this invoice? Return null if you cannot tell."
@@ -254,7 +261,11 @@ class Adjudicator:
         return self._client
 
     def adjudicate(
-        self, invoice: NormInvoice, ranking: Ranking, use_cache: bool = True
+        self,
+        invoice: NormInvoice,
+        ranking: Ranking,
+        use_cache: bool = True,
+        tags: set[str] | None = None,
     ) -> Verdict:
         candidates = ranking.candidates[:TOP_N]
         if not candidates:
@@ -273,7 +284,7 @@ class Adjudicator:
         if self.calls_made >= self.budget:
             return Verdict(rejected="BUDGET_EXHAUSTED")
 
-        prompt = build_prompt(invoice, candidates, self.memory)
+        prompt = build_prompt(invoice, candidates, self.memory, tags)
 
         try:
             verdict = self._ask(prompt, {c.id for c in candidates})

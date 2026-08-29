@@ -1,18 +1,27 @@
-"""What the system already knows about a counterparty. Plan section 5, memory.
+"""What the system already knows. Plan section 5, memory, and Phase 5.
 
 Plain Postgres tables, not a vector database. Our retrieval questions have
 exact right answers - *is this a known alias?* is a string lookup, and a
 B-tree answers it correctly every time.
 
-**Seeded from the alias set, never from the graded run.** Confirmed matches
-write alias rows, and if the graded batch learned its own aliases the reported
-accuracy would be inflated by information the system never actually had. That
-is bug 7 in section 18. The seed set exists to be frozen before grading, and
-it deliberately covers the same customers the graded set will meet - which is
-what "we have dealt with this company before" means in real life.
+Two kinds of memory:
+
+- **Aliases**: the bank name forms a customer's payments arrive under. This is
+  what makes name matching work at all, and what the new-counterparty guardrail
+  checks against.
+- **Episodes**: past cases and how they were settled, retrieved by tag and
+  shown to the adjudicator as worked examples.
+
+**The freeze is the important part.** Confirmed matches teach the alias table,
+so a batch that learned from itself would report accuracy inflated by
+information it never actually had. Memory is snapshotted before a graded run
+and cannot change during it - `learn_from` returns a *new* Memory rather than
+mutating the one the run is using. That is bug 7 in section 18, made
+impossible rather than merely avoided.
 """
 
-from dataclasses import dataclass, field
+import json
+from dataclasses import dataclass, field, replace
 
 import psycopg
 
@@ -23,13 +32,30 @@ from app.names import name_from_bank_text, name_similarity
 # Two names are the same company at or above this.
 SAME_ENTITY = 0.90
 
+# How many worked examples the adjudicator gets. More is not better: they are
+# there to show the shape of a decision, not to be searched through.
+EPISODES_IN_PROMPT = 3
+
+
+@dataclass(frozen=True)
+class Episode:
+    """One past case, and how it was settled."""
+
+    situation: str
+    resolution: str
+    tags: tuple[str, ...]
+    source_split: Split = Split.ALIAS_SEED
+
 
 @dataclass
 class Memory:
-    """Counterparties we have settled with, and the names they arrive under."""
+    """Counterparties we have settled with, the names they arrive under, and
+    the tricky cases we have already worked through."""
 
     variants: dict[str, set[str]] = field(default_factory=dict)   # canonical -> bank forms
     confirmations: dict[str, int] = field(default_factory=dict)   # canonical -> times settled
+    episodes: list[Episode] = field(default_factory=list)
+    frozen: bool = False
 
     def seen(self, name_clean: str) -> int:
         """How many times we have confirmed a payment from this counterparty."""
@@ -48,6 +74,30 @@ class Memory:
             if bank_name in forms:
                 return True
         return False
+
+    def episodes_for(self, tags: set[str], limit: int = EPISODES_IN_PROMPT) -> list[Episode]:
+        """Past cases that share a shape with this one.
+
+        Tag overlap, not embedding similarity. The plan's own rule of thumb:
+        vector search for fuzzy meaning in prose, exact indexes for the rest.
+        A tag like `MDR_GST` either applies or it does not.
+        """
+        if not tags:
+            return []
+        scored = [
+            (len(tags & set(e.tags)), e) for e in self.episodes if tags & set(e.tags)
+        ]
+        scored.sort(key=lambda pair: -pair[0])
+        return [episode for _, episode in scored[:limit]]
+
+    def snapshot(self) -> "Memory":
+        """A frozen copy, safe to hand to a graded run."""
+        return Memory(
+            variants={k: set(v) for k, v in self.variants.items()},
+            confirmations=dict(self.confirmations),
+            episodes=list(self.episodes),
+            frozen=True,
+        )
 
     def __len__(self) -> int:
         return len(self.confirmations)
@@ -79,22 +129,121 @@ def build_from_split(split: Split = Split.ALIAS_SEED, database_url: str | None =
             (split.value,),
         ).fetchall()
 
+        # Never read back examples drawn from the records we are about to grade.
+        memory.episodes = load_episodes(conn, exclude=Split.HELDOUT)
+
     for canonical, description in rows:
-        memory.confirmations[canonical] = memory.confirmations.get(canonical, 0) + 1
-        bank_form = name_from_bank_text(description)
-        if bank_form:
-            memory.variants.setdefault(canonical, set()).add(bank_form)
+        _record(memory, canonical, description)
 
-    return memory
+    return memory.snapshot()
 
 
-def persist(memory: Memory, database_url: str | None = None) -> int:
-    """Write the aliases table, so the UI and later phases can read it."""
+def _record(memory: Memory, canonical: str, description: str) -> None:
+    memory.confirmations[canonical] = memory.confirmations.get(canonical, 0) + 1
+    bank_form = name_from_bank_text(description)
+    if bank_form:
+        memory.variants.setdefault(canonical, set()).add(bank_form)
+
+
+# --- learning ---------------------------------------------------------------
+
+
+def case_tags(decision) -> set[str]:
+    """The shape of a case, for retrieving past ones like it.
+
+    Deliberately observable at decision time. Nothing here comes from the
+    answer key, so the same tags can be computed for a live record.
+    """
+    tags = set()
+    if decision.reason_code is not None:
+        tags.add(decision.reason_code.value)
+    if decision.margin < 0.15:
+        tags.add("thin_margin")
+    if decision.score < 0.90:
+        tags.add("below_bar")
+    for rule in decision.rules_failed:
+        tags.add(f"failed_{rule.replace(' ', '_')}")
+    return tags
+
+
+def learn_from(memory: Memory, result, invoices: dict, transactions: dict) -> Memory:
+    """Fold a finished run's confirmed matches into a **new** Memory.
+
+    Returns a new object rather than mutating the one the run used, so a batch
+    can never learn from itself mid-flight. To use what was learned, run again
+    with the returned memory.
+    """
+    grown = Memory(
+        variants={k: set(v) for k, v in memory.variants.items()},
+        confirmations=dict(memory.confirmations),
+        episodes=list(memory.episodes),
+    )
+
+    for decision in result.decisions:
+        if decision.outcome.value != "AUTO":
+            continue
+        invoice = invoices.get(decision.invoice_id)
+        if invoice is None:
+            continue
+        for txn_id in decision.txn_ids:
+            txn = transactions.get(txn_id)
+            if txn is not None:
+                _record(grown, invoice.name_clean, txn.description_raw)
+
+    return grown
+
+
+def episode_from(decision, invoice, txn, source_split: Split) -> Episode:
+    """Turn one settled case into a worked example.
+
+    Written as a short situation and what was done about it, because that is
+    what is useful to read back - not a row of numbers.
+    """
+    from app.money import fmt
+
+    situation = (
+        f"{invoice.name_clean} owed {fmt(invoice.amount_paise)} and "
+        f"{fmt(txn.amount_paise)} arrived as {txn.description_raw!r}"
+    )
+    resolution = f"{decision.reason_code.value if decision.reason_code else 'MATCHED'}: {decision.reason_text}"
+    return Episode(
+        situation=situation,
+        resolution=resolution,
+        tags=tuple(sorted(case_tags(decision))),
+        source_split=source_split,
+    )
+
+
+# --- persistence ------------------------------------------------------------
+
+
+def load_episodes(conn: psycopg.Connection, exclude: Split | None = None) -> list[Episode]:
+    """Worked examples, minus anything written from the split being graded.
+
+    A case drawn from the graded records and shown back while grading them is
+    the same contamination as an alias learned mid-run.
+    """
+    if exclude is None:
+        rows = conn.execute(
+            "SELECT situation_text, resolution_text, tags, source_split FROM episodes ORDER BY id"
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            """SELECT situation_text, resolution_text, tags, source_split
+               FROM episodes WHERE source_split <> %s ORDER BY id""",
+            (exclude.value,),
+        ).fetchall()
+    return [Episode(s, r, tuple(t or ()), Split(sp)) for s, r, t, sp in rows]
+
+
+def persist(memory: Memory, database_url: str | None = None) -> dict[str, int]:
+    """Write memory back, so the UI and the next run can read it."""
     url = database_url or get_settings().database_url
-    written = 0
 
     with psycopg.connect(url) as conn:
         conn.execute("TRUNCATE aliases RESTART IDENTITY")
+        conn.execute("TRUNCATE episodes RESTART IDENTITY")
+
         for canonical, forms in memory.variants.items():
             for variant in forms:
                 conn.execute(
@@ -104,7 +253,23 @@ def persist(memory: Memory, database_url: str | None = None) -> int:
                        DO UPDATE SET confirmed_count = aliases.confirmed_count + 1""",
                     (canonical, variant, memory.confirmations.get(canonical, 1)),
                 )
-                written += 1
-        conn.commit()
 
-    return written
+        for episode in memory.episodes:
+            conn.execute(
+                """INSERT INTO episodes (situation_text, resolution_text, tags, source_split)
+                   VALUES (%s, %s, %s, %s)""",
+                (
+                    episode.situation,
+                    episode.resolution,
+                    list(episode.tags),
+                    episode.source_split.value,
+                ),
+            )
+
+        conn.commit()
+        counts = {
+            "aliases": conn.execute("SELECT count(*) FROM aliases").fetchone()[0],
+            "episodes": conn.execute("SELECT count(*) FROM episodes").fetchone()[0],
+        }
+
+    return counts

@@ -27,7 +27,7 @@ from app.blocking import Pass, block
 from app.dataset import Outcome, Reason, Split
 from app.guardrails import find_duplicates
 from app.intake import Batch, load_batch
-from app.memory import Memory, build_from_split
+from app.memory import Memory, build_from_split, case_tags, learn_from
 from app.scoring import TUNED_WEIGHTS, Ranking, rank
 
 FAST_PATH = "fast_path"
@@ -213,7 +213,19 @@ def process_batch(
         )
 
         if should_ask:
-            endorsement = adjudicator.adjudicate(invoice, ranking)
+            # The same tags a past case was filed under, computed from what we
+            # can see now. Nothing here comes from the answer key.
+            probe = Decision(
+                invoice_id=invoice.id,
+                outcome=verdict.outcome,
+                score=ranking.score,
+                margin=ranking.margin,
+                reason_code=verdict.reason_code,
+                rules_failed=[r.name for r in verdict.failed],
+            )
+            endorsement = adjudicator.adjudicate(
+                invoice, ranking, tags=case_tags(probe)
+            )
             if endorsement.cached:
                 result.llm_cache_hits += 1
             elif endorsement.rejected is None:

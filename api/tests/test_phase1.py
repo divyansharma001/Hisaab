@@ -132,7 +132,12 @@ def test_split_sizes(datasets):
     assert len(heldout.invoices) == 85
     assert len(datasets[Split.TUNING].invoices) == 45
 
-    customers = {i.counterparty_name_clean for i in heldout.invoices}
+    # History has to cover every batch that gets run, not only the graded one.
+    # Covering the graded customers alone leaves the tuning set entirely held,
+    # and the weight search then measures nothing.
+    customers = {i.counterparty_name_clean for i in heldout.invoices} | {
+        i.counterparty_name_clean for i in datasets[Split.TUNING].invoices
+    }
     seed = datasets[Split.ALIAS_SEED]
     assert len(seed.invoices) == len(customers) * PRIOR_SETTLEMENTS_PER_CUSTOMER
 
@@ -146,8 +151,9 @@ def test_every_graded_customer_has_prior_history(datasets):
     for inv in datasets[Split.ALIAS_SEED].invoices:
         seeded[inv.counterparty_name_clean] = seeded.get(inv.counterparty_name_clean, 0) + 1
 
-    for inv in datasets[Split.HELDOUT].invoices:
-        assert seeded.get(inv.counterparty_name_clean, 0) >= PRIOR_SETTLEMENTS_PER_CUSTOMER
+    for split in (Split.HELDOUT, Split.TUNING):
+        for inv in datasets[split].invoices:
+            assert seeded.get(inv.counterparty_name_clean, 0) >= PRIOR_SETTLEMENTS_PER_CUSTOMER
 
 
 def test_same_seed_gives_the_same_data():

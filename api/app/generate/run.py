@@ -47,11 +47,18 @@ def generate_all(seed: int) -> dict[Split, Dataset]:
     tuning = _generate_split(Split.TUNING, seed + 2, pool[at:])
     at += len(tuning.used_companies)
 
-    # 3. The alias seed set: one prior settlement for every customer the graded
-    #    batch will meet. Sized from the graded set rather than fixed, because
-    #    a history that covers a third of the customers makes the
-    #    new-counterparty guardrail refuse two thirds of the batch.
-    alias_seed = _generate_prior_history(seed + 3, heldout.used_companies)
+    # 3. The alias seed set: prior settlements for every customer *either*
+    #    batch will meet, graded and tuning alike.
+    #
+    #    Covering only the graded customers looks right and is not. The tuning
+    #    set is a real batch too, and with no history for its customers the
+    #    new-counterparty rule holds all 45 records - so the weight grid search
+    #    returned the same 13.3% for every weighting, a flat line measuring
+    #    nothing. A business has history with all of its customers, not with a
+    #    chosen half.
+    alias_seed = _generate_prior_history(
+        seed + 3, heldout.used_companies + tuning.used_companies
+    )
 
     return {
         Split.HELDOUT: heldout.data,
