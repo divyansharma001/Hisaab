@@ -27,7 +27,19 @@ def pct_of(amount_paise: int, rate: Decimal) -> int:
 
 
 def fmt(amount_paise: int) -> str:
-    """Paise to a readable rupee string, in the Indian digit grouping."""
+    """Paise to a readable rupee string, in the Indian digit grouping.
+
+    Strict about the type on purpose. Postgres returns SUM() over BIGINT as a
+    Decimal, and letting one through here fails deep inside a format string
+    with "invalid format string" - which says nothing about where the wrong
+    type came from.
+    """
+    if not isinstance(amount_paise, int):
+        raise TypeError(
+            f"money must be integer paise, got {type(amount_paise).__name__} "
+            f"({amount_paise!r}). Cast it where it enters the code."
+        )
+
     sign = "-" if amount_paise < 0 else ""
     whole, frac = divmod(abs(amount_paise), PAISE_PER_RUPEE)
 
