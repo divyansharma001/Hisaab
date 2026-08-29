@@ -1,0 +1,66 @@
+name: hisaab
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hisaab}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hisaab}
+      POSTGRES_DB: ${POSTGRES_DB:-hisaab}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      # The api must not start until this passes, or it fails to connect
+      # and the error looks like a bug in our own code.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hisaab} -d ${POSTGRES_DB:-hisaab}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  api:
+    build:
+      context: ./api
+      target: dev
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-hisaab}:${POSTGRES_PASSWORD:-hisaab}@db:5432/${POSTGRES_DB:-hisaab}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
+      LLM_CALL_BUDGET: ${LLM_CALL_BUDGET:-40}
+      RANDOM_SEED: ${RANDOM_SEED:-20260829}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      # Source is bind-mounted so edits do not need an image rebuild.
+      - ./api:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  web:
+    build:
+      context: ./web
+      target: dev
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    volumes:
+      - ./web:/app
+      # Keeps the image's node_modules, so the host folder does not shadow it.
+      - /app/node_modules
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  db_data:
