@@ -46,5 +46,7 @@ def health() -> dict:
         "status": "ok" if db_ok else "degraded",
         "database": "up" if db_ok else "down",
         "llm_key_configured": settings.has_real_llm_key,
+        "llm_provider": settings.llm_provider,
+        "llm_model": settings.llm_model,
         "version": app.version,
     }

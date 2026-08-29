@@ -177,7 +177,7 @@ So we measure missed matches and wrong matches separately, and break both down p
 Everything runs in Docker. Nothing runs on the host.
 
 ```bash
-cp .env.example .env          # add your OpenAI API key
+cp .env.example .env          # add your OpenRouter (or OpenAI) key
 docker compose up -d          # db, api, web
 ```
 
@@ -226,7 +226,11 @@ claim the same payment unless we built them that way.
 
 ## Stack
 
-Python, PostgreSQL, `rapidfuzz`, `faker`, `pydantic`, `gpt-4o-mini` via the OpenAI API, FastAPI, React + Vite + TypeScript, Tailwind, shadcn/ui.
+Python, PostgreSQL, `rapidfuzz`, `faker`, `pydantic`, `gpt-4o-mini` through OpenRouter, FastAPI, React + Vite + TypeScript, Tailwind, shadcn/ui.
+
+The adjudicator talks to anything OpenAI-compatible. Three settings pick the
+provider — key, base URL, model name — so OpenRouter and OpenAI direct are the
+same code path.
 
 **No agent framework.**
 The pipeline is plain Python functions.

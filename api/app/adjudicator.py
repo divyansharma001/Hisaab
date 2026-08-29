@@ -205,7 +205,18 @@ class Adjudicator:
     @property
     def client(self) -> openai.OpenAI:
         if self._client is None:
-            self._client = openai.OpenAI(api_key=self.settings.openai_api_key)
+            self._client = openai.OpenAI(
+                api_key=self.settings.llm_api_key,
+                # Empty means OpenAI direct. Any OpenAI-compatible gateway
+                # works by setting this and prefixing the model name.
+                base_url=self.settings.llm_base_url or None,
+                # OpenRouter uses these to attribute traffic. Harmless
+                # anywhere else.
+                default_headers={
+                    "HTTP-Referer": "https://github.com/divyansharma001/Hisaab",
+                    "X-Title": "Hisaab",
+                },
+            )
         return self._client
 
     def adjudicate(
@@ -248,31 +259,38 @@ class Adjudicator:
         reraise=True,
     )
     def _ask(self, prompt: str, valid_ids: set[str]) -> Verdict:
-        # `instructions` holds the byte-stable rules and `input` holds the one
-        # record, which is the split OpenAI caches on. Caching only kicks in
-        # above 1024 tokens though, and our whole request is around 670, so it
-        # never actually engages here - the request is simply too cheap to be
-        # worth caching.
-        response = self.client.responses.parse(
-            model=self.settings.openai_model,
-            instructions=SYSTEM_RULES,
-            input=prompt,
-            text_format=Adjudication,
-            max_output_tokens=1024,
+        # Chat completions rather than the Responses API, because that is what
+        # OpenAI-compatible gateways actually implement. `response_format`
+        # carries the schema, so the reply is valid JSON in our shape or the
+        # request fails - the schema check below is a belt on top of braces.
+        #
+        # The rules go in the system message and the record in the user
+        # message. That split is what a provider caches on, though caching
+        # needs a prompt over 1024 tokens and ours is around 670, so it never
+        # engages here. Right shape, no effect at this size.
+        response = self.client.chat.completions.parse(
+            model=self.settings.llm_model,
+            messages=[
+                {"role": "system", "content": SYSTEM_RULES},
+                {"role": "user", "content": prompt},
+            ],
+            response_format=Adjudication,
+            max_completion_tokens=1024,
         )
 
         usage = dict(
-            input_tokens=response.usage.input_tokens if response.usage else 0,
-            output_tokens=response.usage.output_tokens if response.usage else 0,
+            input_tokens=response.usage.prompt_tokens if response.usage else 0,
+            output_tokens=response.usage.completion_tokens if response.usage else 0,
             cache_read_tokens=(
-                response.usage.input_tokens_details.cached_tokens
-                if response.usage and response.usage.input_tokens_details
+                getattr(response.usage.prompt_tokens_details, "cached_tokens", 0) or 0
+                if response.usage and response.usage.prompt_tokens_details
                 else 0
             ),
         )
         raw = response.to_json()
 
-        answer = response.output_parsed
+        choice = response.choices[0] if response.choices else None
+        answer = choice.message.parsed if choice else None
         if answer is None:
             return Verdict(rejected="SCHEMA_INVALID", prompt=prompt, raw_response=raw, **usage)
 

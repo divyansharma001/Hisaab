@@ -26,8 +26,9 @@ services:
       target: dev
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-hisaab}:${POSTGRES_PASSWORD:-hisaab}@db:5432/${POSTGRES_DB:-hisaab}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-openai/gpt-4o-mini}
       LLM_CALL_BUDGET: ${LLM_CALL_BUDGET:-40}
       RANDOM_SEED: ${RANDOM_SEED:-20260829}
       LOG_LEVEL: ${LOG_LEVEL:-info}
