@@ -10,3 +10,6 @@ faker==37.8.0
 rapidfuzz==3.14.1
 anthropic==0.69.0
 tenacity==9.1.2
+
+# Tests
+pytest==8.4.2

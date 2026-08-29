@@ -803,10 +803,17 @@ Don't generate 85 random records. Design the mix so **every branch gets exercise
 - Seed the random number generator with a fixed value so runs are reproducible.
 - Emit `records.json` and `ground_truth.json` from the same function.
 
+**The ceiling this mix implies.**
+Of the 85 graded records, 62 expect `AUTO`, 12 expect `EXCEPTION`, 7 expect `REVIEW` and 4 expect `AMBIGUOUS`.
+Straight-through processing counts only the `AUTO` records, so **72.9% is the highest STP any correct
+system can reach on this data.**
+Anything above that is a false approval, not an improvement.
+The illustrative 78.8% in §19.1 is a table-format example, not a target.
+
 ### Three sets, not one
 
 Generating a single batch and using it for everything is training on your test set. Generate
-**130 records** and split them:
+**160 records** and split them:
 
 | Set | Size | Purpose |
 |---|---|---|
@@ -893,7 +900,9 @@ run out of time, we stop where we are and still have a working system.
 ### Phase 1 — Data and truth
 1. Write the generator producing the table in §9, plus the answer key.
 2. Load everything into Postgres using the schema in §10.
-3. Add the `UNIQUE` constraint on `matches.transaction_id`.
+3. Add the sum invariant on `match_allocations` as a database trigger (§10).
+   **Not** a `UNIQUE` constraint on `matches.transaction_id` — that is bug 2 in §18, and it makes
+   combined payments impossible.
 4. **Do not touch an LLM yet.**
 
 ### Phase 2 — Deterministic core
@@ -1404,7 +1413,7 @@ the usual demo — **we lead with what we couldn't solve.**
 
 ## 18. Pre-build bug sweep
 
-Nine bugs found reviewing this plan before implementation. All are fixed above; this is the
+Eleven bugs found reviewing this plan before implementation. All are fixed above; this is the
 record of what they were, because the same mistakes are easy to reintroduce while coding.
 
 ### Critical — would have broken scenarios in our own dataset
@@ -1449,11 +1458,24 @@ seed set, frozen before the graded run (§9).*
 
 **8. Tuning and reporting on the same records.**
 Training on the test set. The grid search would fit those specific 85 records and the
-reported number would be optimistic. *Fixed: 130 records split 30/45/85 (§9).*
+reported number would be optimistic. *Fixed: 160 records split 30/45/85 (§9).*
 
 **9. Self-consistency tested at temperature 0.**
 At temperature 0 the answers are near-identical by construction, so the test proved nothing.
 *Fixed: run the consistency check at 0.7, and bypass the result cache (§8.5).*
+
+**10. The build order still asked for the constraint that bug 2 removed.**
+Phase 1 step 3 said *"add the `UNIQUE` constraint on `matches.transaction_id`"* while §10 and bug 2
+above had already replaced it with `match_allocations` and a sum invariant.
+Building Phase 1 to the letter would have reintroduced bug 2 on day one.
+*Fixed: Phase 1 step 3 now asks for the sum invariant trigger (§11).*
+
+**11. The three sets did not add up.**
+§9 said *"generate 130 records and split them"* into sets of 30, 45 and 85.
+Those sum to 160.
+130 is what you get by counting only the tuning and held-out sets and forgetting the alias seed set,
+which is the one the whole split exists to create.
+*Fixed: 160 everywhere (§9, §20).*
 
 ### The pattern worth noticing
 
@@ -1577,7 +1599,7 @@ Keep this table. It is the answer to "how does this meet the brief?"
 | The brief says | Where we answer it |
 |---|---|
 | "closes one finance-ops loop" | Invoice → decision → allocation → audit log |
-| "50+ record batch of synthetic data" | 85 graded, 130 generated (§9) |
+| "50+ record batch of synthetic data" | 85 graded, 160 generated (§9) |
 | "reporting its match rate" | By count **and by value** (§19.2) |
 | "exceptions it could not resolve" | Reason code plus evidence for every one (§11) |
 | "verification capacity, not generation speed, is the bottleneck" | The guardrail layer (§7) and eval harness (§8) are the centre of the design |

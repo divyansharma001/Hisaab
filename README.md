@@ -145,7 +145,7 @@ The data is synthetic, so the answer key is generated alongside it.
 | Metric | Target |
 |---|---|
 | Wrong auto-approvals | **0 — non-negotiable** |
-| Straight-through rate | 65–80% |
+| Straight-through rate | 65–72.9% (see below for why 72.9 is the ceiling) |
 | Missed exceptions | 0 |
 | Cost per 1,000 records | tracked |
 | P95 latency per record | tracked |
@@ -153,7 +153,7 @@ The data is synthetic, so the answer key is generated alongside it.
 Match rate alone is a bad metric — match everything to anything and you hit 100%.
 So we measure missed matches and wrong matches separately, and break both down per scenario.
 
-130 records are generated and split three ways: 30 to seed the alias table, 45 to tune the weights, and **85 held out** as the only numbers we report.
+160 records are generated and split three ways: 30 to seed the alias table, 45 to tune the weights, and **85 held out** as the only numbers we report.
 
 ---
 
@@ -173,10 +173,39 @@ docker compose up -d          # db, api, web
 | `web` | React + Vite | 5173 |
 
 ```bash
-docker compose exec api python run_batch.py   # run the batch
-docker compose exec api python eval.py        # print every eval table
-docker compose down -v && docker compose up -d  # reset and reseed
+docker compose exec api python generate_data.py  # build the data and answer key
+docker compose exec api python load_data.py      # load it into Postgres
+docker compose exec api python -m pytest tests/  # run the tests
+
+docker compose exec api python run_batch.py      # run the batch      (Phase 2)
+docker compose exec api python eval.py           # print eval tables  (Phase 2)
+
+docker compose down -v && docker compose up -d   # wipe and start over
 ```
+
+## The data
+
+160 records from one fixed seed, split three ways.
+
+| Set | Size | Purpose |
+|---|---|---|
+| Alias seed | 30 | Fills the known-names table before the graded run. Never scored. |
+| Tuning | 45 | Grid-searching the weights. |
+| Held out | 85 | The only numbers we report. |
+
+The answer key is written by the same function that writes the data, so it
+cannot drift. Fourteen scenarios are represented, from exact reference matches
+to bills nobody ever paid.
+
+Of the 85 graded records, 62 should be auto-approved, 12 are real exceptions,
+7 need a human, and 4 are genuinely ambiguous. **So 72.9% is the highest
+straight-through rate any correct system can reach on this data.** Anything
+above that is a false approval, not an improvement.
+
+Generation is checked before anything is written: the answer key must reference
+records that exist, the settlement maths must balance, an invoice marked unpaid
+must have nothing in the batch that fits it, and no two invoices may be able to
+claim the same payment unless we built them that way.
 
 ---
 

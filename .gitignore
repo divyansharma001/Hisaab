@@ -20,7 +20,7 @@ dist/
 *.tsbuildinfo
 
 # Generated data and run output
-data/generated/
+**/data/generated/
 out/
 *.log
 
