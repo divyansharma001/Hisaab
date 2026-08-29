@@ -502,14 +502,28 @@ def batched_settlement(ctx: Ctx, count: int, group: int = 3) -> None:
         remaining -= size
 
         batch_utr = ctx.utr()
-        settled_on = min(ANCHOR, ctx.paid_on(date(2026, 7, 20), 0, 20))
+
+        # A gateway batch is the payments made on one day, so the invoices in
+        # it were due around the same time. Giving them unrelated due dates
+        # made some of them look 47 days late for no reason other than how the
+        # generator picked them, which is a fact about our code and not about
+        # reconciliation.
+        _, batch_due = ctx.invoice_dates(date(2026, 5, 1), date(2026, 7, 1))
+        settled_on = min(ANCHOR, batch_due + timedelta(days=ctx.rng.randrange(0, 6)))
+
         gateway_txns: list[Transaction] = []
         invoices: list[Invoice] = []
         net_total = 0
 
         for _ in range(size):
             company = ctx.company()
-            inv = ctx.add_invoice(company, ctx.amount(), "batched_settlement")
+            due = batch_due + timedelta(days=ctx.rng.randrange(-6, 4))
+            inv = ctx.add_invoice(
+                company,
+                ctx.amount(),
+                "batched_settlement",
+                dates=(due - timedelta(days=PAYMENT_TERM_DAYS), due),
+            )
             invoices.append(inv)
 
             deduction = settlement.gateway(inv.amount_paise)
@@ -533,7 +547,7 @@ def batched_settlement(ctx: Ctx, count: int, group: int = 3) -> None:
         ctx.add_txn(
             f"RAZORPAY SETTLEMENT UTR {batch_utr}",
             net_total,
-            settled_on + timedelta(days=2),   # T+2
+            min(ANCHOR, settled_on + timedelta(days=2)),   # T+2
             "batched_settlement",
             source="bank",
             utr=batch_utr,

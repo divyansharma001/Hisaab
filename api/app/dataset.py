@@ -44,6 +44,10 @@ class Reason(StrEnum):
     AMOUNT_GAP_UNEXPLAINED = "AMOUNT_GAP_UNEXPLAINED"
     NO_PAYMENT_FOUND = "NO_PAYMENT_FOUND"
     AMBIGUOUS_CANDIDATES = "AMBIGUOUS_CANDIDATES"
+    # Nothing specific was wrong; the evidence just was not strong enough.
+    # Kept distinct from AMOUNT_GAP_UNEXPLAINED so the exception list never
+    # blames the amount for a case where the amount was fine.
+    BELOW_THRESHOLD = "BELOW_THRESHOLD"
     DATE_OUT_OF_WINDOW = "DATE_OUT_OF_WINDOW"
     VALUE_CEILING = "VALUE_CEILING"
 

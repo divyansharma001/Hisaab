@@ -333,9 +333,15 @@ You've built databases and queues. Here's the translation.
 
 ```python
 candidates  = block_1to1(inv, txns)        # 0.75x to 1.10x
-candidates += block_partial(inv, txns)     # 0.15x to 0.75x, same counterparty
-candidates += block_combined(inv, txns)    # 1.10x to 5.0x, same counterparty
+candidates += block_partial(inv, txns)     # 0.05x to 0.95x, same counterparty
+candidates += block_combined(inv, txns)    # above 1.05x, same counterparty,
+                                           # capped at everything they owe
 ```
+
+- **The combined pass has no fixed multiple.** A single payment covering a ₹57,600 bill and a
+  ₹3,71,750 bill is 7.45x the small one, so a 5.0x cap drops the small invoice's own payment
+  before scoring. The real ceiling is the sum of that customer's open invoices: nobody pays more
+  than they owe. See §18, bug 12.
 
 - **Tag every candidate with the pass that found it.** The scorer must know it is looking at
   a partial or a combination, or the amount score is meaningless.
@@ -560,8 +566,25 @@ margin = scores[0] - scores[1]     # best minus runner-up
 - Best 0.95, runner-up 0.42 → margin 0.53. **One clear winner.**
 - Best 0.95, runner-up 0.94 → margin 0.01. **A coin flip wearing a high score.**
 
-The second case is the two-identical-invoices scenario. Score alone waves it through.
-Margin catches it. Both numbers go to the guardrails; neither alone can approve anything.
+The second case is the **two-identical-transactions** scenario: one bill, and a duplicated payment
+that appears twice. Score alone waves it through, margin catches it, and measured on the held-out
+set those records do land at margin 0.00.
+
+**Margin does not catch two identical invoices**, and it is worth being precise about why.
+Ranking runs per invoice, over candidate *transactions*, so the runner-up is another payment - not
+another bill.
+Two identical invoices each see one obvious payment and each score a wide margin (0.79 on our data).
+The ambiguity is on the transaction side, and the thing that catches it is **global assignment**
+(§5, box 7), which refuses to auto-approve when two invoices want the same payment.
+
+The two mechanisms are mirror images and both are needed:
+
+| Ambiguity | Caught by |
+|---|---|
+| Two payments compete for one invoice | Margin |
+| Two invoices compete for one payment | Global assignment |
+
+Both numbers go to the guardrails; neither alone can approve anything.
 
 ### 6.8 Three more worked examples
 
@@ -1413,7 +1436,7 @@ the usual demo — **we lead with what we couldn't solve.**
 
 ## 18. Pre-build bug sweep
 
-Eleven bugs found reviewing this plan before implementation. All are fixed above; this is the
+Thirteen bugs found reviewing this plan before implementation. All are fixed above; this is the
 record of what they were, because the same mistakes are easy to reintroduce while coding.
 
 ### Critical — would have broken scenarios in our own dataset
@@ -1476,6 +1499,23 @@ Those sum to 160.
 130 is what you get by counting only the tuning and held-out sets and forgetting the alias seed set,
 which is the one the whole split exists to create.
 *Fixed: 160 everywhere (§9, §20).*
+
+**12. The combined-payment window had an arbitrary ceiling.**
+§5 capped the combined blocking pass at 5.0x the invoice.
+Combined payments are routinely lopsided: one payment settling a ₹57,600 bill and a ₹3,71,750 bill
+is 7.45x the smaller one, which fell outside the window, so that invoice never saw its own payment.
+Measured on the held-out set, blocking recall was 87 of 89.
+*Fixed: the ceiling is now the sum of that counterparty's open invoices, which is a real limit rather
+than a guessed multiple. Recall is 89 of 89 with no increase in candidates per invoice (§5).*
+
+**13. Margin was credited with catching a case it cannot see.**
+§6.7 named the two-identical-invoices scenario as the thing margin exists for.
+Ranking is per invoice over candidate transactions, so margin only ever compares payments;
+two identical invoices each score a wide margin, measured at 0.79 on the held-out set.
+Reading §6.7 alone, global assignment looks redundant and could be cut - and cutting it is how a
+double-counted payment gets auto-approved.
+*Fixed: §6.7 now names the duplicate-transaction case, which margin does catch at 0.00, and states
+that the invoice-side mirror is global assignment's job.*
 
 ### The pattern worth noticing
 
