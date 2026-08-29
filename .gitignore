@@ -1,0 +1,30 @@
+# Secrets
+.env
+.env.local
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Generated data and run output
+data/generated/
+out/
+*.log
+
+# OS and editors
+.DS_Store
+.idea/
+.vscode/
