@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from app import guardrails
+from app.adjudicator import Adjudicator, Verdict as Endorsement
 from app.assignment import Claim, Conflict, claim_amounts, resolve
 from app.blocking import Pass, block
 from app.dataset import Outcome, Reason, Split
@@ -31,6 +32,7 @@ from app.scoring import TUNED_WEIGHTS, Ranking, rank
 
 FAST_PATH = "fast_path"
 SCORER = "scorer"
+LLM = "llm"
 NO_CANDIDATE = "none"
 INPUT_GUARDRAIL = "input_guardrail"
 
@@ -52,6 +54,12 @@ class Decision:
     amount_paise: int = 0
     rules_passed: list[str] = field(default_factory=list)
     rules_failed: list[str] = field(default_factory=list)
+    llm_used: bool = False
+    llm_confidence: float = 0.0
+    llm_reasoning: str = ""
+    llm_rejected: str | None = None
+    prompt: str = ""
+    raw_response: str = ""
 
 
 @dataclass
@@ -63,6 +71,11 @@ class RunResult:
     conflicts: list[Conflict] = field(default_factory=list)
     seconds: float = 0.0
     memory_size: int = 0
+    llm_calls: int = 0
+    llm_cache_hits: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
 
     def by_outcome(self) -> dict[Outcome, int]:
         counts: dict[Outcome, int] = {}
@@ -90,6 +103,8 @@ def process_batch(
     batch: Batch,
     weights: dict[str, float] | None = None,
     memory: Memory | None = None,
+    adjudicator: Adjudicator | None = None,
+    use_guardrails: bool = True,
 ) -> RunResult:
     started = datetime.now(UTC)
     weights = weights or TUNED_WEIGHTS
@@ -167,15 +182,59 @@ def process_batch(
         claim = assignment.claim
         invoice, ranking, best = claim.invoice, claim.ranking, claim.best
 
-        verdict = guardrails.apply(
-            invoice,
-            ranking,
-            best,
+        rule_args = dict(
             claimed_txn_ids=claim.txn_ids,
             duplicates=duplicates,
             counterparty_seen=memory.seen(invoice.name_clean),
             conflict=assignment.conflict,
         )
+
+        # Run the rules first, with no model involved.
+        verdict = (
+            guardrails.apply(invoice, ranking, best, **rule_args)
+            if use_guardrails
+            # Ablation only: the score bar on its own, which is what the
+            # deterministic core did before the guardrail layer existed.
+            else guardrails.score_only(invoice, ranking, best)
+        )
+        endorsement: Endorsement | None = None
+
+        # Then ask the adjudicator only when its answer could actually change
+        # the outcome - the record sits in the middle band *and* the score or
+        # margin bar is the only thing holding it. A duplicated payment or an
+        # unexplained gap is held whatever a model says, so asking there is
+        # money spent on an answer nobody is allowed to act on. On our data
+        # that is 16 candidate records cut to 1.
+        should_ask = (
+            adjudicator is not None
+            and assignment.conflict is None
+            and guardrails.route(ranking.score, ranking.margin) == guardrails.ADJUDICATE
+            and verdict.an_endorsement_could_change_this
+        )
+
+        if should_ask:
+            endorsement = adjudicator.adjudicate(invoice, ranking)
+            if endorsement.cached:
+                result.llm_cache_hits += 1
+            elif endorsement.rejected is None:
+                result.llm_calls += 1
+                result.input_tokens += endorsement.input_tokens
+                result.output_tokens += endorsement.output_tokens
+                result.cache_read_tokens += endorsement.cache_read_tokens
+
+            # Re-run every rule with the recommendation in hand. The model
+            # never skips a check; it only answers one of them.
+            verdict = guardrails.apply(
+                invoice, ranking, best, **rule_args, endorsement=endorsement
+            )
+
+        used_llm = endorsement is not None and endorsement.usable
+        if best.signals.reference == 1.0:
+            decided_by = FAST_PATH
+        elif used_llm and verdict.outcome is Outcome.AUTO:
+            decided_by = LLM
+        else:
+            decided_by = SCORER
 
         result.decisions.append(
             Decision(
@@ -189,11 +248,17 @@ def process_batch(
                 margin_basis=ranking.margin_basis,
                 reason_code=verdict.reason_code,
                 reason_text=verdict.reason_text,
-                decided_by=FAST_PATH if best.signals.reference == 1.0 else SCORER,
+                decided_by=decided_by,
                 scenario=invoice.scenario,
                 amount_paise=invoice.amount_paise,
                 rules_passed=[r.name for r in verdict.passed],
                 rules_failed=[r.name for r in verdict.failed],
+                llm_used=endorsement is not None and endorsement.rejected != "NO_API_KEY",
+                llm_confidence=endorsement.confidence if endorsement else 0.0,
+                llm_reasoning=endorsement.reasoning if endorsement else "",
+                llm_rejected=endorsement.rejected if endorsement else None,
+                prompt=endorsement.prompt if endorsement else "",
+                raw_response=endorsement.raw_response if endorsement else "",
             )
         )
 
@@ -206,6 +271,17 @@ def run(
     split: Split,
     weights: dict[str, float] | None = None,
     use_memory: bool = True,
+    use_llm: bool = True,
+    use_guardrails: bool = True,
+    adjudicator: Adjudicator | None = None,
 ) -> RunResult:
     memory = build_from_split() if use_memory else Memory()
-    return process_batch(load_batch(split), weights, memory)
+    if use_llm and adjudicator is None:
+        adjudicator = Adjudicator(memory=memory)
+    return process_batch(
+        load_batch(split),
+        weights,
+        memory,
+        adjudicator if use_llm else None,
+        use_guardrails=use_guardrails,
+    )

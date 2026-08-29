@@ -44,6 +44,10 @@ AUTO = "AUTO"
 ADJUDICATE = "ADJUDICATE"
 EXCEPTION = "EXCEPTION"
 
+# The only two rules an adjudicator's answer can satisfy. Everything else is
+# policy rather than judgement, so a model's opinion cannot move it.
+ENDORSABLE_RULES = {"score", "margin"}
+
 
 @dataclass
 class Rule:
@@ -66,6 +70,18 @@ class Verdict:
     @property
     def failed(self) -> list[Rule]:
         return [r for r in self.rules if not r.passed]
+
+    @property
+    def an_endorsement_could_change_this(self) -> bool:
+        """Would asking the adjudicator make any difference to the outcome?
+
+        Only if the *sole* thing standing in the way is the score or margin
+        bar. A duplicated payment, an unexplained gap or a match above the
+        value ceiling is held whatever a model thinks, so asking is money
+        spent on an answer that cannot be acted on.
+        """
+        failed = {r.name for r in self.failed}
+        return bool(failed) and failed <= ENDORSABLE_RULES
 
 
 # --- Layer 1: input guardrails ---------------------------------------------
@@ -145,6 +161,10 @@ def find_duplicates(batch: Batch) -> dict[str, list[str]]:
     return duplicates
 
 
+# An adjudicator recommendation below this is not evidence of anything.
+ENDORSEMENT_FLOOR = 0.80
+
+
 def apply(
     invoice: NormInvoice,
     ranking: Ranking,
@@ -154,19 +174,43 @@ def apply(
     duplicates: dict[str, list[str]],
     counterparty_seen: int,
     conflict: str | None = None,
+    endorsement=None,
 ) -> Verdict:
-    """Every hard rule, on one proposed match. All must pass to automate it."""
+    """Every hard rule, on one proposed match. All must pass to automate it.
+
+    An adjudicator recommendation can satisfy the **score and margin bars, and
+    nothing else**. Those two are the question the model was asked - is this
+    the right payment - so a confident answer from it is evidence about
+    exactly that.
+
+    It can never satisfy the value ceiling, the duplicate rule, the conflict
+    rule, the amount check, the date window or the new-counterparty rule. Those
+    are policy, not judgement, and this is what "the LLM never has the final say
+    on money" means in code rather than in a sentence.
+    """
     rules: list[Rule] = []
 
     def rule(name: str, ok: bool, detail: str) -> None:
         rules.append(Rule(name, ok, detail))
 
-    rule("score", ranking.score >= AUTO_SCORE, f"{ranking.score:.2f} (needs {AUTO_SCORE})")
-    rule(
-        "margin",
-        ranking.margin >= MARGIN_FLOOR,
-        f"{ranking.margin:.2f} (needs {MARGIN_FLOOR}, basis {ranking.margin_basis})",
+    endorsed = (
+        endorsement is not None
+        and getattr(endorsement, "usable", False)
+        and endorsement.chosen_id == best.id
+        and endorsement.confidence >= ENDORSEMENT_FLOOR
     )
+
+    if endorsed:
+        note = f"adjudicator backed {best.id} at {endorsement.confidence:.2f}"
+        rule("score", True, f"{ranking.score:.2f} below {AUTO_SCORE}, but {note}")
+        rule("margin", True, f"{ranking.margin:.2f} below {MARGIN_FLOOR}, but {note}")
+    else:
+        rule("score", ranking.score >= AUTO_SCORE, f"{ranking.score:.2f} (needs {AUTO_SCORE})")
+        rule(
+            "margin",
+            ranking.margin >= MARGIN_FLOOR,
+            f"{ranking.margin:.2f} (needs {MARGIN_FLOOR}, basis {ranking.margin_basis})",
+        )
 
     # The amount must be explained to the rupee. Unexplained money is never OK,
     # whatever the score says.
@@ -305,3 +349,27 @@ def _match_reason(best: Scored) -> Reason:
     if best.signals.name is not None and best.signals.name < 1.0:
         return Reason.MATCHED_ALIAS
     return Reason.MATCHED_NAME_AMOUNT
+
+
+def score_only(invoice: NormInvoice, ranking: Ranking, best: Scored) -> Verdict:
+    """The score bar and nothing else. Ablation only, never the live path.
+
+    This is what the deterministic core did before the guardrail layer: no
+    value ceiling, no duplicate rule, no conflict check, no new-counterparty
+    rule. Kept so the ablation table can show what those rules actually cost
+    and bought, rather than asserting it.
+    """
+    passed = ranking.score >= AUTO_SCORE
+    rules = [Rule("score", passed, f"{ranking.score:.2f} (needs {AUTO_SCORE})")]
+
+    if passed:
+        return Verdict(Outcome.AUTO, _match_reason(best), best.amount.basis, rules)
+
+    weakest = min(best.signals.available().items(), key=lambda kv: kv[1], default=("score", 0.0))
+    return Verdict(
+        Outcome.EXCEPTION,
+        Reason.BELOW_THRESHOLD,
+        f"Scored {ranking.score:.2f} against a bar of {AUTO_SCORE}; "
+        f"weakest signal was {weakest[0]} at {weakest[1]:.2f}",
+        rules,
+    )
