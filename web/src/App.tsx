@@ -1,71 +1,96 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { api } from "./api";
+import { Cash } from "./screens/Cash";
+import { Exceptions } from "./screens/Exceptions";
+import { Summary } from "./screens/Summary";
+import { Trace } from "./screens/Trace";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+/**
+ * Four screens and a tab bar. No router, no state library.
+ *
+ * The exception list is first on purpose: the demo opens on what we could not
+ * do, because one cherry-picked match proves nothing.
+ */
+const TABS = [
+  { id: "exceptions", label: "Exceptions" },
+  { id: "summary", label: "This run" },
+  { id: "cash", label: "Cash position" },
+] as const;
 
-type Health = {
-  status: string;
-  database: string;
-  llm_key_configured: boolean;
-  version: string;
-};
+type Tab = (typeof TABS)[number]["id"];
 
 export default function App() {
-  const [health, setHealth] = useState<Health | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("exceptions");
+  const [openRecord, setOpenRecord] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+  const [nonce, setNonce] = useState(0);
 
-  useEffect(() => {
-    fetch(`${API_URL}/api/health`)
-      .then((r) => r.json())
-      .then(setHealth)
-      .catch((e) => setError(String(e)));
-  }, []);
+  async function rerun() {
+    setRunning(true);
+    try {
+      await api.run();
+      setOpenRecord(null);
+      setNonce((n) => n + 1);
+    } finally {
+      setRunning(false);
+    }
+  }
 
   return (
-    <main className="min-h-screen bg-neutral-50 text-neutral-900">
-      <div className="mx-auto max-w-2xl px-6 py-20">
-        <h1 className="text-3xl font-semibold tracking-tight">Hisaab</h1>
-        <p className="mt-2 text-neutral-600">
-          An AI finance controller that matches invoices to bank payments.
-        </p>
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <header className="border-b border-slate-200 bg-white">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-4">
+          <div>
+            <h1 className="text-base font-semibold tracking-tight">Hisaab</h1>
+            <p className="text-xs text-slate-500">
+              Matches invoices to bank payments, and is honest about the rest
+            </p>
+          </div>
 
-        <div className="mt-10 rounded-lg border border-neutral-200 bg-white p-5">
-          <h2 className="text-sm font-medium text-neutral-500 uppercase tracking-wide">
-            Phase 0 &middot; stack check
-          </h2>
+          <div className="flex items-center gap-2">
+            <nav className="flex rounded-lg bg-slate-100 p-0.5">
+              {TABS.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => {
+                    setTab(t.id);
+                    setOpenRecord(null);
+                  }}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    tab === t.id
+                      ? "bg-white text-slate-900 shadow-sm"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </nav>
 
-          {error && <p className="mt-4 text-red-600">API unreachable: {error}</p>}
+            <button
+              onClick={rerun}
+              disabled={running}
+              className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-slate-700 disabled:opacity-50"
+            >
+              {running ? "Running…" : "Run batch"}
+            </button>
+          </div>
+        </div>
+      </header>
 
-          {!error && !health && <p className="mt-4 text-neutral-500">Checking...</p>}
-
-          {health && (
-            <dl className="mt-4 space-y-2 text-sm">
-              <Row label="Web" value="up" ok />
-              <Row label="API" value={health.status} ok={health.status === "ok"} />
-              <Row label="Database" value={health.database} ok={health.database === "up"} />
-              <Row
-                label="LLM key"
-                value={health.llm_key_configured ? "configured" : "missing"}
-                ok={health.llm_key_configured}
-              />
-            </dl>
+      <main className="mx-auto max-w-6xl px-6 py-6">
+        <div key={nonce}>
+          {openRecord ? (
+            <Trace id={openRecord} onBack={() => setOpenRecord(null)} />
+          ) : tab === "exceptions" ? (
+            <Exceptions onOpen={setOpenRecord} />
+          ) : tab === "summary" ? (
+            <Summary />
+          ) : (
+            <Cash />
           )}
         </div>
-      </div>
-    </main>
-  );
-}
-
-function Row({ label, value, ok }: { label: string; value: string; ok: boolean }) {
-  return (
-    <div className="flex items-center justify-between border-b border-neutral-100 pb-2 last:border-0">
-      <dt className="text-neutral-600">{label}</dt>
-      <dd
-        className={`rounded px-2 py-0.5 text-xs font-medium ${
-          ok ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"
-        }`}
-      >
-        {value}
-      </dd>
+      </main>
     </div>
   );
 }

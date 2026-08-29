@@ -20,6 +20,8 @@ dist/
 *.tsbuildinfo
 
 # Generated data and run output
+# The demo snapshot is derived; one command regenerates it.
+web/public/results.json
 **/data/generated/
 out/
 *.log

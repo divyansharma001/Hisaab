@@ -236,13 +236,43 @@ docker compose up -d          # db, api, web
 ```bash
 docker compose exec api python generate_data.py  # build the data and answer key
 docker compose exec api python load_data.py      # load it into Postgres
-docker compose exec api python -m pytest tests/  # run the tests
 
-docker compose exec api python run_batch.py      # run the batch      (Phase 2)
-docker compose exec api python eval.py           # print eval tables  (Phase 2)
+docker compose exec api python run_batch.py      # run a batch
+docker compose exec api python eval.py           # every table from the plan
+docker compose exec api python eval.py --llm     # also test the model on its own
+docker compose exec api python ablate.py         # what each layer bought
+docker compose exec api python learn.py          # watch it get better
+docker compose exec api python tune_weights.py   # grid-search the weights
+
+docker compose exec api python freeze.py         # check nothing drifted
+docker compose exec api python snapshot.py       # write the UI's offline fallback
+docker compose exec api python -m pytest tests/  # 170 tests
 
 docker compose down -v && docker compose up -d   # wipe and start over
 ```
+
+Then open **http://localhost:5173**.
+
+## The screens
+
+Four, and the order matters.
+
+**Exceptions** opens first, because leading with what we could not do is the
+point. Every row names a reason code and the evidence behind it.
+
+**Decision trace** is the one that explains the whole thesis. Click any row:
+every signal with the weight it actually carried, the settlement arithmetic,
+every rule ticked or crossed, and the model's reasoning labelled a
+recommendation rather than a decision.
+
+**This run** is the headline plus the per-scenario table that stops it hiding
+anything.
+
+**Cash position** is the four numbers, including the value sitting in the
+exception queue — money the business cannot currently account for.
+
+If the API is down the UI reads `web/public/results.json` on its own. Nothing
+to flip. Regenerate it with `snapshot.py`.
 
 ## The data
 

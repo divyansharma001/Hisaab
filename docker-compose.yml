@@ -37,6 +37,11 @@ services:
     volumes:
       # Source is bind-mounted so edits do not need an image rebuild.
       - ./api:/app
+      # snapshot.py writes the static fallback the UI reads when the API is
+      # unreachable, so the api container needs to reach the web app's public
+      # folder. Without this the file lands inside the container and the
+      # fallback silently does not exist.
+      - ./web/public:/web/public
     depends_on:
       db:
         condition: service_healthy

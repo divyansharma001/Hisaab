@@ -139,3 +139,35 @@ def test_fmt_refuses_anything_that_is_not_integer_paise():
         fmt(Decimal("100"))
     with pytest.raises(TypeError):
         fmt(1.5)
+
+
+# --- the static fallback ----------------------------------------------------
+
+
+def test_the_snapshot_holds_everything_the_ui_reads():
+    """The UI falls back to this file when the API is unreachable, so it has
+    to answer every call the UI makes. A missing key would show up as a blank
+    screen five minutes before presenting."""
+    import json
+    from pathlib import Path
+
+    path = Path(__file__).parent.parent.parent / "web" / "public" / "results.json"
+    if not path.exists():
+        pytest.skip("no snapshot yet; run snapshot.py")
+
+    payload = json.loads(path.read_text())
+
+    # Every key api.ts asks for.
+    for key in ("summary", "exceptions", "eval", "cash"):
+        assert key in payload, key
+
+    assert payload["summary"]["records"] == 85
+    assert payload["cash"]["aging"]
+    assert payload["exceptions"]["exceptions"]
+
+    # Traces for the records the demo actually opens.
+    traces = [k for k in payload if k.startswith("trace_")]
+    assert traces, "no decision traces in the snapshot"
+
+    held = {f"trace_{r['invoice_id']}" for r in payload["exceptions"]["exceptions"]}
+    assert held <= set(traces), "an exception row has no trace to open"
