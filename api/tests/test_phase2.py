@@ -267,34 +267,20 @@ def test_an_exceptions_candidate_list_is_evidence_not_a_claim():
     assert not j.false_auto_approval
 
 
-# --- the baseline -----------------------------------------------------------
+# --- what Phase 2 established -----------------------------------------------
+#
+# The pipeline now carries Phase 3's guardrails, so the straight-through rate
+# it produces is no longer Phase 2's number. What still belongs here is the
+# thing Phase 2 was responsible for: the scorer must never match the wrong
+# payment. Every remaining refusal is a rule's decision, not a scoring error.
 
 
-def test_phase_2_baseline(result, truth):
-    """The number Phase 3 gets measured against.
-
-    Deterministic only, no LLM, no guardrails beyond a score threshold. The
-    false approvals here are not a bug to fix in Phase 2: they are duplicates,
-    two invoices wanting one payment, and matches above the value ceiling -
-    exactly what the guardrail layer is for. They must go to zero in Phase 3
-    while the straight-through rate drops.
-    """
+def test_the_scorer_never_matches_the_wrong_payment(result, truth):
     metrics = evaluate(result, truth)
-
-    assert metrics.total == 85
-    assert metrics.straight_through_rate > 80.0
-    assert metrics.outcome_accuracy > 80.0
-
-    # Every false approval must be a missing guardrail, not a scoring mistake.
     assert metrics.wrong_transaction_approvals == []
-    guardrail_scenarios = {"duplicate_transaction", "identical_invoices", "value_ceiling"}
-    assert {j.scenario for j in metrics.false_auto_approvals} <= guardrail_scenarios
 
 
 def test_no_scenario_is_completely_broken(result, truth):
     metrics = evaluate(result, truth)
-    guardrail_scenarios = {"duplicate_transaction", "identical_invoices", "value_ceiling"}
     for scenario, (right, total, _) in metrics.by_scenario().items():
-        if scenario in guardrail_scenarios:
-            continue
         assert right / total >= 0.75, f"{scenario} only {right}/{total}"

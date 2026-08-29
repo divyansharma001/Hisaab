@@ -14,6 +14,7 @@ high score, and it is the only thing that catches two identical invoices.
 """
 
 from dataclasses import dataclass, field
+from datetime import date
 from itertools import combinations
 
 from rapidfuzz import fuzz
@@ -105,6 +106,11 @@ class Scored:
     score: float
     weights_used: dict[str, float]
     amount: AmountVerdict
+    # The due date the date signal was measured from. Stored rather than
+    # recomputed, because the guardrail has to check the same window the
+    # scorer used - measuring from two different anchors is bug 5 in
+    # section 18, and it makes records pass one check and fail the other.
+    date_anchor: date = date.min
 
     @property
     def id(self) -> str:
@@ -171,9 +177,25 @@ def score_name(invoice: NormInvoice, txn: NormTxn, aliases=None) -> float | None
     return name_similarity(txn.name_clean, invoice.name_clean)
 
 
-def score_date(invoice: NormInvoice, txn: NormTxn) -> float:
+def due_anchor(invoice: NormInvoice, amount: AmountVerdict, batch: Batch) -> date:
+    """The date this payment was actually due to arrive.
+
+    Normally the invoice's own due date. For a combined payment it is the
+    latest due date in the group: a customer settling three bills at once pays
+    around when the last one falls due, so the older invoices are not late in
+    any meaningful sense. Measuring them against their own due dates makes a
+    correct match look 55 days overdue.
+    """
+    if amount.pass_used is not Pass.COMBINED or not amount.members:
+        return invoice.due_date
+
+    group = {invoice.id, *amount.members}
+    return max(i.due_date for i in batch.invoices if i.id in group)
+
+
+def score_date(invoice: NormInvoice, txn: NormTxn, anchor: date | None = None) -> float:
     """Plan section 6.6. Late is normal, early is odd. The asymmetry is deliberate."""
-    days = (txn.value_date - invoice.due_date).days
+    days = (txn.value_date - (anchor or invoice.due_date)).days
 
     if days < -7:
         return 0.0
@@ -310,11 +332,12 @@ def score_pair(
     weights = weights or TUNED_WEIGHTS
 
     amount = score_amount(invoice, candidate, batch)
+    anchor = due_anchor(invoice, amount, batch)
     signals = Signals(
         reference=score_reference(invoice, candidate.txn),
         amount=amount.score,
         name=score_name(invoice, candidate.txn, aliases),
-        date=score_date(invoice, candidate.txn),
+        date=score_date(invoice, candidate.txn, anchor),
     )
 
     available = signals.available()
@@ -336,6 +359,7 @@ def score_pair(
         score=round(score, 4),
         weights_used=used,
         amount=amount,
+        date_anchor=anchor,
     )
 
 
@@ -352,11 +376,22 @@ def rank(
         reverse=True,
     )
     ranking = Ranking(invoice=invoice, candidates=scored)
+    if not scored:
+        return ranking
 
-    if len(scored) >= 2:
-        ranking.margin = round(scored[0].score - scored[1].score, 4)
+    best = scored[0]
+
+    # Margin only means something between candidates we would have to *choose*
+    # between. The instalments of a partial payment are not alternatives to
+    # each other - we are taking both - so comparing them produces a tiny
+    # margin and holds back a match that was never ambiguous.
+    group = {best.id, *best.amount.members}
+    rival = next((s for s in scored[1:] if s.id not in group), None)
+
+    if rival is not None:
+        ranking.margin = round(best.score - rival.score, 4)
         ranking.margin_basis = RUNNER_UP
-    elif scored:
+    else:
         # The sole-candidate rule. Plan section 7, and bug 3 in section 18:
         # a null margin here silently passes or silently fails every
         # fast-path record, depending on how the comparison is written.

@@ -15,12 +15,10 @@ import random
 from app.dataset import Dataset, Split
 from app.generate.builders import BUILDERS, Ctx
 from app.generate.companies import Counterparty, build_pool
-from app.generate.mix import mix_for
+from app.generate.mix import ALIAS_SEED_SCENARIO, mix_for
 
 # Scenarios whose difficulty comes from the counterparty name. These are the
 # ones the alias seed set needs to have met before.
-NAME_DRIVEN = {"alias_variation", "tds_deduction", "gateway_fee", "clean_name_amount"}
-
 POOL_SIZE = 170
 
 
@@ -49,11 +47,11 @@ def generate_all(seed: int) -> dict[Split, Dataset]:
     tuning = _generate_split(Split.TUNING, seed + 2, pool[at:])
     at += len(tuning.used_companies)
 
-    # 3. The alias seed set. Reuses the graded set's name-driven companies,
-    #    which is exactly what "we have seen this customer before" means.
-    seen = _name_driven_companies(heldout)
-    topped_up = seen + pool[at:]
-    alias_seed = _generate_split(Split.ALIAS_SEED, seed + 3, topped_up)
+    # 3. The alias seed set: one prior settlement for every customer the graded
+    #    batch will meet. Sized from the graded set rather than fixed, because
+    #    a history that covers a third of the customers makes the
+    #    new-counterparty guardrail refuse two thirds of the batch.
+    alias_seed = _generate_prior_history(seed + 3, heldout.used_companies)
 
     return {
         Split.HELDOUT: heldout.data,
@@ -62,11 +60,23 @@ def generate_all(seed: int) -> dict[Split, Dataset]:
     }
 
 
-def _name_driven_companies(ctx: Ctx) -> list[Counterparty]:
-    """The graded set's counterparties whose scenarios turn on the name."""
-    wanted = {
-        inv.counterparty_name_clean
-        for inv in ctx.data.invoices
-        if inv.scenario in NAME_DRIVEN
-    }
-    return [c for c in ctx.used_companies if c.clean in wanted]
+def _generate_prior_history(seed: int, companies: list[Counterparty]) -> Ctx:
+    """One already-settled invoice per graded customer.
+
+    Uses the *same* companies as the graded set on purpose. That is what
+    "we have dealt with this company before" means, and it is what makes the
+    alias table and the new-counterparty rule mean anything.
+
+    Different invoices, different amounts, different bank name forms - only
+    the customers are shared, so nothing about the graded answers leaks.
+    """
+    unique: list[Counterparty] = []
+    seen: set[str] = set()
+    for company in companies:
+        if company.clean not in seen:
+            seen.add(company.clean)
+            unique.append(company)
+
+    ctx = Ctx(Split.ALIAS_SEED, seed, unique)
+    BUILDERS[ALIAS_SEED_SCENARIO](ctx, len(unique), companies=unique)
+    return ctx

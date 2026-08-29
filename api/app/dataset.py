@@ -48,6 +48,10 @@ class Reason(StrEnum):
     # Kept distinct from AMOUNT_GAP_UNEXPLAINED so the exception list never
     # blames the amount for a case where the amount was fine.
     BELOW_THRESHOLD = "BELOW_THRESHOLD"
+    # Rejected before scoring: bad amount, bad currency, bad date, missing id.
+    MALFORMED_INPUT = "MALFORMED_INPUT"
+    # Never settled with this counterparty before, so a human signs the first one.
+    NEW_COUNTERPARTY = "NEW_COUNTERPARTY"
     DATE_OUT_OF_WINDOW = "DATE_OUT_OF_WINDOW"
     VALUE_CEILING = "VALUE_CEILING"
 

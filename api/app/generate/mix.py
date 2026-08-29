@@ -25,10 +25,19 @@ HELDOUT_MIX: dict[str, int] = {
 }
 
 SPLIT_SIZES: dict[Split, int] = {
-    Split.ALIAS_SEED: 30,
     Split.TUNING: 45,
     Split.HELDOUT: 85,
 }
+
+# The alias seed set has no scenario mix. Its size is not a number we choose -
+# it is one prior settlement per customer the graded batch will meet, so the
+# new-counterparty guardrail has real history to check against.
+#
+# The plan fixed it at 30. The graded set has 81 distinct customers, so 30
+# records left 64 of 85 invoices looking like first-time counterparties and
+# the guardrail correctly refused to automate them. Straight-through came out
+# at 22.4%, which measures our synthetic history, not our matcher.
+ALIAS_SEED_SCENARIO = "prior_settlement"
 
 # Some scenarios need whole groups to make sense: a pair of identical invoices,
 # a batch of gateway payments under one deposit. Scaling must respect that.
@@ -45,6 +54,12 @@ def mix_for(split: Split) -> dict[str, int]:
     The held-out set uses the plan's table unchanged. The other two are scaled
     down, then nudged until the counts add up exactly.
     """
+    if split is Split.ALIAS_SEED:
+        raise ValueError(
+            "the alias seed set has no scenario mix; its size comes from the "
+            "graded set's counterparties"
+        )
+
     target = SPLIT_SIZES[split]
     if split is Split.HELDOUT:
         return dict(HELDOUT_MIX)

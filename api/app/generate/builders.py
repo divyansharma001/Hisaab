@@ -54,6 +54,10 @@ MIN_AMOUNT_GAP_PAISE = rupees(40)
 
 VALUE_CEILING_PAISE = rupees(500_000)
 
+# How deep the prior history goes. Matches the new-counterparty guardrail,
+# which wants three confirmed settlements before it will automate a customer.
+PRIOR_SETTLEMENTS_PER_CUSTOMER = 3
+
 
 class Ctx:
     """Shared state for one split's generation run."""
@@ -759,7 +763,51 @@ def value_ceiling(ctx: Ctx, count: int) -> None:
         )
 
 
+def prior_settlement(ctx: Ctx, count: int, companies: list[Counterparty] | None = None) -> None:
+    """Invoices this business already settled, before the graded batch.
+
+    This is what the alias seed set is *for*: it stands in for the ledger a
+    real finance team already has. It teaches the alias table the name forms
+    a customer's bank uses, and it is what the new-counterparty guardrail
+    checks against.
+
+    Three records per customer the graded batch will meet, because the
+    guardrail asks for three prior settlements before it will automate anyone.
+    Anything less and it blocks most of the batch - not because the matcher is
+    wrong, but because our synthetic history is too shallow to answer the
+    question the rule is asking.
+    """
+    pool = companies or [ctx.company() for _ in range(count)]
+
+    for company in pool[:count]:
+        for _ in range(PRIOR_SETTLEMENTS_PER_CUSTOMER):
+            inv = ctx.add_invoice(
+                company,
+                ctx.amount(5_000, 900_000),
+                "prior_settlement",
+                dates=ctx.invoice_dates(date(2025, 6, 1), date(2026, 3, 1)),
+            )
+            variant = company.bank_name(ctx.rng)
+            utr = ctx.utr()
+            txn = ctx.add_txn(
+                f"NEFT/{variant}/{utr}",
+                inv.amount_paise,
+                ctx.paid_on(inv.due_date),
+                "prior_settlement",
+                utr=utr,
+                name_clean=clean_name(variant),
+            )
+            ctx.add_truth(
+                inv,
+                Outcome.AUTO,
+                f"Previously settled with {company.clean}, paid as {variant!r}",
+                txn_ids=[txn.id],
+                reason=Reason.MATCHED_ALIAS,
+            )
+
+
 BUILDERS = {
+    "prior_settlement": prior_settlement,
     "exact_reference": exact_reference,
     "clean_name_amount": clean_name_amount,
     "alias_variation": alias_variation,

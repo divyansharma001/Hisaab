@@ -11,6 +11,7 @@ import sys
 
 from app.dataset import Split
 from app.money import fmt
+from app.persist import save
 from app.pipeline import run
 
 
@@ -20,6 +21,7 @@ def main() -> int:
         "--split", default=Split.HELDOUT.value, choices=[s.value for s in Split]
     )
     parser.add_argument("--show", type=int, default=12, help="rows to print")
+    parser.add_argument("--no-save", action="store_true", help="do not write to the database")
     args = parser.parse_args()
 
     result = run(Split(args.split))
@@ -34,6 +36,13 @@ def main() -> int:
     for d in held[: args.show]:
         code = d.reason_code.value if d.reason_code else "-"
         print(f"  {d.invoice_id:<11} {fmt(d.amount_paise):>14}  {code:<24} {d.reason_text}")
+
+    if not args.no_save:
+        counts = save(result)
+        print(
+            f"\nWritten: {counts['matches']} matches, {counts['allocations']} allocations, "
+            f"{counts['exceptions']} exceptions, {counts['audit']} audit rows"
+        )
 
     return 0
 

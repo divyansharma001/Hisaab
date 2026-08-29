@@ -3,28 +3,36 @@
 Read this file top to bottom and you know exactly what the system does. That
 readability is the deliverable, not a side effect of skipping a framework.
 
-**Phase 2 scope.** Deterministic only. No LLM, and none of the decision
-guardrails from section 7 beyond a bare score threshold. Global assignment,
-the value ceiling, the duplicate rule and the rest arrive in Phase 3, and the
-straight-through rate is expected to *drop* when they do. That trade is the
-whole point of the project, so the Phase 2 number is recorded as the baseline
-to measure it against.
+The shape, in order:
+
+1. Input guardrails, before anything costs us
+2. Block, then score, then rank - per invoice
+3. **Global assignment across the whole batch**, so the answer does not depend
+   on which invoice came out of the database first
+4. The hard rules, which decide what is allowed to become an action
+5. Three terminal states, all logged
+
+**Phase 3 scope.** No LLM yet. Records that would go to the adjudicator are
+held for a human instead, which is the honest placeholder: they are exactly
+the cases we cannot settle on our own.
 """
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from app import guardrails
+from app.assignment import Claim, Conflict, claim_amounts, resolve
 from app.blocking import Pass, block
 from app.dataset import Outcome, Reason, Split
-from app.intake import Batch, NormInvoice, load_batch
-from app.scoring import TUNED_WEIGHTS, Ranking, Scored, rank
-
-# Phase 2 has one rule. The full table lands in Phase 3.
-AUTO_THRESHOLD = 0.90
+from app.guardrails import find_duplicates
+from app.intake import Batch, load_batch
+from app.memory import Memory, build_from_split
+from app.scoring import TUNED_WEIGHTS, Ranking, rank
 
 FAST_PATH = "fast_path"
 SCORER = "scorer"
 NO_CANDIDATE = "none"
+INPUT_GUARDRAIL = "input_guardrail"
 
 
 @dataclass
@@ -32,6 +40,8 @@ class Decision:
     invoice_id: str
     outcome: Outcome
     txn_ids: list[str] = field(default_factory=list)
+    allocated_paise: int = 0
+    allocations: dict[str, int] = field(default_factory=dict)
     score: float = 0.0
     margin: float = 0.0
     margin_basis: str = "sole_candidate"
@@ -40,6 +50,8 @@ class Decision:
     decided_by: str = NO_CANDIDATE
     scenario: str = ""
     amount_paise: int = 0
+    rules_passed: list[str] = field(default_factory=list)
+    rules_failed: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -48,7 +60,9 @@ class RunResult:
     run_id: str
     decisions: list[Decision] = field(default_factory=list)
     rankings: dict[str, Ranking] = field(default_factory=dict)
+    conflicts: list[Conflict] = field(default_factory=list)
     seconds: float = 0.0
+    memory_size: int = 0
 
     def by_outcome(self) -> dict[Outcome, int]:
         counts: dict[Outcome, int] = {}
@@ -57,136 +71,141 @@ class RunResult:
         return counts
 
 
-def reason_for_match(best: Scored) -> Reason:
-    """Why we think this payment settles this bill.
+def settled_txn_ids(ranking: Ranking) -> list[str]:
+    """Which payments this invoice is claiming.
 
-    The reason code is what a human acts on, so section 19.7 scores us on
-    getting it right - not only on reaching the right verdict.
+    A partial payment is only settled by all of its instalments. Filtering
+    them by individual score drops a late one and claims the bill was cleared
+    by the first payment alone.
     """
-    if best.amount.pass_used is Pass.COMBINED:
-        return Reason.COMBINED_PAYMENT
+    best = ranking.best
+    if best is None:
+        return []
     if best.amount.pass_used is Pass.PARTIAL:
-        return Reason.PARTIAL_PAYMENT
-
-    if best.signals.reference == 1.0:
-        return Reason.MATCHED_REFERENCE
-
-    formula = best.amount.formula
-    if formula and formula.startswith("MDR_GST"):
-        return Reason.MDR_GST
-    if formula == "TDS_2PCT":
-        return Reason.TDS_2PCT
-    if formula == "TDS_10PCT":
-        return Reason.TDS_10PCT
-
-    # An exact amount under a name that needed fuzzy work to recognise.
-    if best.signals.name is not None and best.signals.name < 1.0:
-        return Reason.MATCHED_ALIAS
-    return Reason.MATCHED_NAME_AMOUNT
+        return [best.id, *best.amount.members]
+    return [best.id]
 
 
-def reason_for_refusal(ranking: Ranking) -> tuple[Reason, str]:
-    """Why we will not decide this one. Never 'low confidence'."""
-    best = ranking.best
-    if best is None:
-        return Reason.NO_PAYMENT_FOUND, "No payment in this batch could belong to this invoice"
-
-    if best.signals.date == 0.0:
-        days = (best.txn.value_date - ranking.invoice.due_date).days
-        wording = f"{days} days after" if days > 0 else f"{-days} days before"
-        return Reason.DATE_OUT_OF_WINDOW, f"Best candidate paid {wording} the due date"
-
-    if best.signals.amount is not None and best.signals.amount < 0.9:
-        return Reason.AMOUNT_GAP_UNEXPLAINED, f"Best candidate: {best.amount.basis}"
-
-    if ranking.margin < 0.15:
-        return (
-            Reason.AMBIGUOUS_CANDIDATES,
-            f"Top two candidates are {ranking.margin:.2f} apart, too close to call",
-        )
-
-    weakest = min(
-        ranking.best.signals.available().items(), key=lambda kv: kv[1], default=("score", 0.0)
-    )
-    return (
-        Reason.BELOW_THRESHOLD,
-        f"Scored {ranking.score:.2f} against a bar of {AUTO_THRESHOLD}; "
-        f"weakest signal was {weakest[0]} at {weakest[1]:.2f}",
-    )
-
-
-def find_by_reference(invoice: NormInvoice, batch: Batch):
-    """The fast path. Plan section 5, box 3.
-
-    A reference match is strong evidence, not a free pass: the result still
-    goes through scoring and the guardrails like everything else.
-    """
-    hits = [t for t in batch.transactions if invoice.invoice_no in t.refs]
-    return hits[0] if len(hits) == 1 else None
-
-
-def decide(ranking: Ranking, decided_by: str) -> Decision:
-    """Phase 2's decision rule: one threshold, nothing else."""
-    invoice = ranking.invoice
-    base = dict(
-        invoice_id=invoice.id,
-        scenario=invoice.scenario,
-        amount_paise=invoice.amount_paise,
-        score=ranking.score,
-        margin=ranking.margin,
-        margin_basis=ranking.margin_basis,
-        decided_by=decided_by,
-    )
-
-    best = ranking.best
-    if best is None:
-        code, text = reason_for_refusal(ranking)
-        return Decision(outcome=Outcome.EXCEPTION, reason_code=code, reason_text=text, **base)
-
-    if ranking.score >= AUTO_THRESHOLD:
-        # A partial payment is only settled by all of its instalments, and the
-        # scorer already worked out which ones. Filtering by individual score
-        # would drop a late instalment and claim the bill was settled by the
-        # first one alone.
-        txn_ids = [best.id, *best.amount.members] if best.amount.pass_used is Pass.PARTIAL else [best.id]
-
-        return Decision(
-            outcome=Outcome.AUTO,
-            txn_ids=txn_ids,
-            reason_code=reason_for_match(best),
-            reason_text=best.amount.basis,
-            **base,
-        )
-
-    code, text = reason_for_refusal(ranking)
-    return Decision(
-        outcome=Outcome.EXCEPTION,
-        txn_ids=[best.id],
-        reason_code=code,
-        reason_text=text,
-        **base,
-    )
-
-
-def process_batch(batch: Batch, weights: dict[str, float] | None = None) -> RunResult:
-    weights = weights or TUNED_WEIGHTS
+def process_batch(
+    batch: Batch,
+    weights: dict[str, float] | None = None,
+    memory: Memory | None = None,
+) -> RunResult:
     started = datetime.now(UTC)
-    run_id = f"run-{started:%Y%m%d-%H%M%S}"
-    result = RunResult(split=batch.split, run_id=run_id)
+    weights = weights or TUNED_WEIGHTS
+    memory = memory if memory is not None else Memory()
+
+    # "Today" is the latest date in the feed, not the wall clock, so a record
+    # never starts failing the future-date check because time passed.
+    today = max(t.value_date for t in batch.transactions) if batch.transactions else started.date()
+
+    result = RunResult(
+        split=batch.split,
+        run_id=f"run-{started:%Y%m%d-%H%M%S}",
+        memory_size=len(memory),
+    )
+
+    duplicates = find_duplicates(batch)
+    claims: list[Claim] = []
+
+    # --- 1 and 2: input guardrails, then score what survives ---------------
 
     for invoice in batch.invoices:
-        candidates = block(invoice, batch)
-        ranking = rank(invoice, candidates, batch, weights)
+        problems = guardrails.check_invoice(invoice, today)
+        if problems:
+            result.decisions.append(
+                Decision(
+                    invoice_id=invoice.id,
+                    outcome=Outcome.EXCEPTION,
+                    reason_code=Reason.MALFORMED_INPUT,
+                    reason_text="; ".join(problems),
+                    decided_by=INPUT_GUARDRAIL,
+                    scenario=invoice.scenario,
+                    amount_paise=invoice.amount_paise,
+                    rules_failed=["input"],
+                )
+            )
+            continue
+
+        # Bad transactions never reach the scorer, let alone an LLM.
+        usable = [c for c in block(invoice, batch) if not guardrails.check_txn(c.txn, today)]
+        ranking = rank(invoice, usable, batch, weights, memory or None)
         result.rankings[invoice.id] = ranking
 
-        referenced = find_by_reference(invoice, batch)
-        decided_by = FAST_PATH if referenced else (SCORER if candidates else NO_CANDIDATE)
+        if ranking.best is None:
+            result.decisions.append(
+                Decision(
+                    invoice_id=invoice.id,
+                    outcome=Outcome.EXCEPTION,
+                    reason_code=Reason.NO_PAYMENT_FOUND,
+                    reason_text="No payment in this batch could belong to this invoice",
+                    decided_by=NO_CANDIDATE,
+                    scenario=invoice.scenario,
+                    amount_paise=invoice.amount_paise,
+                )
+            )
+            continue
 
-        result.decisions.append(decide(ranking, decided_by))
+        txn_ids = settled_txn_ids(ranking)
+        claims.append(
+            Claim(
+                invoice=invoice,
+                ranking=ranking,
+                best=ranking.best,
+                allocations=claim_amounts(invoice, ranking, txn_ids),
+            )
+        )
 
+    # --- 3: resolve the whole batch at once --------------------------------
+
+    assignments, conflicts = resolve(claims)
+    result.conflicts = conflicts
+
+    # --- 4 and 5: the hard rules, then a terminal state --------------------
+
+    for assignment in assignments:
+        claim = assignment.claim
+        invoice, ranking, best = claim.invoice, claim.ranking, claim.best
+
+        verdict = guardrails.apply(
+            invoice,
+            ranking,
+            best,
+            claimed_txn_ids=claim.txn_ids,
+            duplicates=duplicates,
+            counterparty_seen=memory.seen(invoice.name_clean),
+            conflict=assignment.conflict,
+        )
+
+        result.decisions.append(
+            Decision(
+                invoice_id=invoice.id,
+                outcome=verdict.outcome,
+                txn_ids=claim.txn_ids,
+                allocated_paise=claim.allocated_paise if verdict.outcome is Outcome.AUTO else 0,
+                allocations=dict(claim.allocations) if verdict.outcome is Outcome.AUTO else {},
+                score=ranking.score,
+                margin=ranking.margin,
+                margin_basis=ranking.margin_basis,
+                reason_code=verdict.reason_code,
+                reason_text=verdict.reason_text,
+                decided_by=FAST_PATH if best.signals.reference == 1.0 else SCORER,
+                scenario=invoice.scenario,
+                amount_paise=invoice.amount_paise,
+                rules_passed=[r.name for r in verdict.passed],
+                rules_failed=[r.name for r in verdict.failed],
+            )
+        )
+
+    result.decisions.sort(key=lambda d: d.invoice_id)
     result.seconds = (datetime.now(UTC) - started).total_seconds()
     return result
 
 
-def run(split: Split, weights: dict[str, float] | None = None) -> RunResult:
-    return process_batch(load_batch(split), weights)
+def run(
+    split: Split,
+    weights: dict[str, float] | None = None,
+    use_memory: bool = True,
+) -> RunResult:
+    memory = build_from_split() if use_memory else Memory()
+    return process_batch(load_batch(split), weights, memory)

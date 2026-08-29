@@ -55,6 +55,10 @@ def validate(data: Dataset) -> Report:
 
 
 def _check_counts(data: Dataset, r: Report) -> None:
+    if data.split is Split.ALIAS_SEED:
+        _check_prior_history(data, r)
+        return
+
     want = mix_for(data.split)
     got = data.scenario_counts()
 
@@ -72,6 +76,31 @@ def _check_counts(data: Dataset, r: Report) -> None:
     for inv in data.invoices:
         if inv.id not in covered:
             r.error(f"{inv.id} ({inv.scenario}): no answer key row")
+
+
+def _check_prior_history(data: Dataset, r: Report) -> None:
+    """The seed set is one settled invoice per customer, nothing else."""
+    for inv in data.invoices:
+        if inv.scenario != "prior_settlement":
+            r.error(f"{inv.id}: the seed set holds prior settlements only, got {inv.scenario}")
+
+    from app.generate.builders import PRIOR_SETTLEMENTS_PER_CUSTOMER
+
+    counts: dict[str, int] = {}
+    for inv in data.invoices:
+        counts[inv.counterparty_name_clean] = counts.get(inv.counterparty_name_clean, 0) + 1
+
+    for name, n in counts.items():
+        if n != PRIOR_SETTLEMENTS_PER_CUSTOMER:
+            r.error(
+                f"{name}: {n} prior settlements, but the guardrail asks for "
+                f"{PRIOR_SETTLEMENTS_PER_CUSTOMER}"
+            )
+
+    covered = {t.invoice_id for t in data.truth}
+    for inv in data.invoices:
+        if inv.id not in covered:
+            r.error(f"{inv.id}: no answer key row")
 
 
 def _check_references(data: Dataset, r: Report) -> None:

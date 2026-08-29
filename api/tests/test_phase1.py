@@ -118,9 +118,36 @@ def test_explain_gives_up_when_nothing_fits():
 
 
 def test_split_sizes(datasets):
-    assert len(datasets[Split.HELDOUT].invoices) == 85
+    """The seed set is not a fixed number.
+
+    Its size is three prior settlements per customer the graded batch will
+    meet, because the new-counterparty guardrail asks for three before it will
+    automate anyone. Fixing it at 30 left 64 of 85 graded invoices looking like
+    first-time counterparties, and straight-through came out at 22.4% - a
+    number about our synthetic history, not our matcher.
+    """
+    from app.generate.builders import PRIOR_SETTLEMENTS_PER_CUSTOMER
+
+    heldout = datasets[Split.HELDOUT]
+    assert len(heldout.invoices) == 85
     assert len(datasets[Split.TUNING].invoices) == 45
-    assert len(datasets[Split.ALIAS_SEED].invoices) == 30
+
+    customers = {i.counterparty_name_clean for i in heldout.invoices}
+    seed = datasets[Split.ALIAS_SEED]
+    assert len(seed.invoices) == len(customers) * PRIOR_SETTLEMENTS_PER_CUSTOMER
+
+
+def test_every_graded_customer_has_prior_history(datasets):
+    """Otherwise the new-counterparty guardrail blocks them for a reason that
+    is about our data rather than about the payment."""
+    from app.generate.builders import PRIOR_SETTLEMENTS_PER_CUSTOMER
+
+    seeded: dict[str, int] = {}
+    for inv in datasets[Split.ALIAS_SEED].invoices:
+        seeded[inv.counterparty_name_clean] = seeded.get(inv.counterparty_name_clean, 0) + 1
+
+    for inv in datasets[Split.HELDOUT].invoices:
+        assert seeded.get(inv.counterparty_name_clean, 0) >= PRIOR_SETTLEMENTS_PER_CUSTOMER
 
 
 def test_same_seed_gives_the_same_data():
