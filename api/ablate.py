@@ -16,11 +16,13 @@ from app.memory import build_from_split
 from app.money import fmt
 from app.pipeline import run
 
-# Anthropic list price for claude-opus-5, in paise per token.
-# Input $5 / MTok, output $25 / MTok, at roughly Rs 88 to the dollar.
+# OpenAI list price for gpt-4o-mini, in paise per token.
+# Input $0.15 / MTok, output $0.60 / MTok, at roughly Rs 88 to the dollar.
 RUPEES_PER_USD = 88
-INPUT_PAISE_PER_TOKEN = 5 / 1_000_000 * RUPEES_PER_USD * 100
-OUTPUT_PAISE_PER_TOKEN = 25 / 1_000_000 * RUPEES_PER_USD * 100
+INPUT_USD_PER_MTOK = 0.15
+OUTPUT_USD_PER_MTOK = 0.60
+INPUT_PAISE_PER_TOKEN = INPUT_USD_PER_MTOK / 1_000_000 * RUPEES_PER_USD * 100
+OUTPUT_PAISE_PER_TOKEN = OUTPUT_USD_PER_MTOK / 1_000_000 * RUPEES_PER_USD * 100
 
 CONFIGURATIONS = [
     ("Scoring only, no guardrails", dict(use_guardrails=False, use_memory=False, use_llm=False)),
@@ -76,9 +78,9 @@ def main() -> int:
     adjudicator = Adjudicator(memory=build_from_split())
     if not adjudicator.available:
         print(
-            "\n  Note: no Anthropic API key is set, so the adjudicator row ran with the\n"
+            "\n  Note: no OpenAI API key is set, so the adjudicator row ran with the\n"
             "  model unavailable. Every record it would have asked about fell back to a\n"
-            "  human, which is the safe failure. Set ANTHROPIC_API_KEY to measure it."
+            "  human, which is the safe failure. Set OPENAI_API_KEY to measure it."
         )
 
     per_thousand = cost_paise(final_result) / max(len(truth), 1) * 1000

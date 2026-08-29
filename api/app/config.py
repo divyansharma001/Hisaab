@@ -10,8 +10,8 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql://hisaab:hisaab@db:5432/hisaab"
 
-    anthropic_api_key: str = ""
-    anthropic_model: str = "claude-sonnet-5"
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o-mini"
 
     # Hard cap on LLM calls per batch (plan section 7, layer 3, rule 5).
     llm_call_budget: int = 40
@@ -30,8 +30,8 @@ class Settings(BaseSettings):
     @property
     def has_real_llm_key(self) -> bool:
         """The placeholder from .env.example must not count as configured."""
-        key = self.anthropic_api_key
-        return key.startswith("sk-ant-") and "xxxx" not in key
+        key = self.openai_api_key
+        return key.startswith("sk-") and "xxxx" not in key
 
 
 @lru_cache

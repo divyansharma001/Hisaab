@@ -20,10 +20,9 @@ set is no longer the one the guardrails assumed.
 
 import hashlib
 import json
-import os
 from dataclasses import dataclass, field
 
-import anthropic
+import openai
 from pydantic import BaseModel, Field
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
@@ -75,8 +74,12 @@ class Verdict:
         return self.rejected is None and self.chosen_id is not None
 
 
-# The stable prefix. Byte-identical on every call, so the API can cache it and
-# we pay for it roughly once per batch instead of once per record.
+# The stable prefix, byte-identical on every call. It goes in `instructions`
+# rather than the per-record `input`, which is the boundary OpenAI caches on.
+#
+# On our workload caching never actually engages: it needs a prompt over 1024
+# tokens and ours is about 670. Kept split anyway - it costs nothing, and it is
+# the right shape if the prompt ever grows.
 SYSTEM_RULES = """You are a reconciliation adjudicator for an Indian finance team.
 
 You are given one unpaid invoice and a short list of candidate bank payments.
@@ -193,16 +196,16 @@ class Adjudicator:
         self.budget = settings.llm_call_budget if budget is None else budget
         self.calls_made = 0
         self.cache: dict[str, Verdict] = {}
-        self._client: anthropic.Anthropic | None = None
+        self._client: openai.OpenAI | None = None
 
     @property
     def available(self) -> bool:
         return self.settings.has_real_llm_key
 
     @property
-    def client(self) -> anthropic.Anthropic:
+    def client(self) -> openai.OpenAI:
         if self._client is None:
-            self._client = anthropic.Anthropic(api_key=self.settings.anthropic_api_key)
+            self._client = openai.OpenAI(api_key=self.settings.openai_api_key)
         return self._client
 
     def adjudicate(
@@ -229,7 +232,7 @@ class Adjudicator:
 
         try:
             verdict = self._ask(prompt, {c.id for c in candidates})
-        except anthropic.APIError as exc:
+        except openai.APIError as exc:
             return Verdict(rejected=f"API_ERROR: {type(exc).__name__}", prompt=prompt)
 
         self.calls_made += 1
@@ -238,37 +241,38 @@ class Adjudicator:
 
     @retry(
         retry=retry_if_exception_type(
-            (anthropic.RateLimitError, anthropic.APIConnectionError, anthropic.APITimeoutError)
+            (openai.RateLimitError, openai.APIConnectionError, openai.APITimeoutError)
         ),
         stop=stop_after_attempt(3),
         wait=wait_exponential(min=1, max=10),
         reraise=True,
     )
     def _ask(self, prompt: str, valid_ids: set[str]) -> Verdict:
-        response = self.client.messages.parse(
-            model=self.settings.anthropic_model,
-            max_tokens=1024,
-            system=[
-                {
-                    "type": "text",
-                    "text": SYSTEM_RULES,
-                    # Byte-identical on every call, so we pay for these rules
-                    # roughly once per batch rather than once per record.
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=[{"role": "user", "content": prompt}],
-            output_format=Adjudication,
+        # `instructions` holds the byte-stable rules and `input` holds the one
+        # record, which is the split OpenAI caches on. Caching only kicks in
+        # above 1024 tokens though, and our whole request is around 670, so it
+        # never actually engages here - the request is simply too cheap to be
+        # worth caching.
+        response = self.client.responses.parse(
+            model=self.settings.openai_model,
+            instructions=SYSTEM_RULES,
+            input=prompt,
+            text_format=Adjudication,
+            max_output_tokens=1024,
         )
 
         usage = dict(
-            input_tokens=response.usage.input_tokens,
-            output_tokens=response.usage.output_tokens,
-            cache_read_tokens=getattr(response.usage, "cache_read_input_tokens", 0) or 0,
+            input_tokens=response.usage.input_tokens if response.usage else 0,
+            output_tokens=response.usage.output_tokens if response.usage else 0,
+            cache_read_tokens=(
+                response.usage.input_tokens_details.cached_tokens
+                if response.usage and response.usage.input_tokens_details
+                else 0
+            ),
         )
         raw = response.to_json()
 
-        answer = response.parsed_output
+        answer = response.output_parsed
         if answer is None:
             return Verdict(rejected="SCHEMA_INVALID", prompt=prompt, raw_response=raw, **usage)
 

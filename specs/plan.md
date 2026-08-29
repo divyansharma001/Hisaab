@@ -1024,7 +1024,7 @@ It closes the second half of the track title for roughly an hour of work.
 | Database | PostgreSQL | Structured financial data. You already know it. |
 | Fuzzy matching | `rapidfuzz` | Fast, simple, no ML needed |
 | Data generation | `faker` + fixed seed | Reproducible |
-| LLM | Claude via the Anthropic API | Reliable structured JSON output |
+| LLM | `gpt-4o-mini` via the OpenAI API | Reliable structured JSON output, and cheap enough that one call per batch rounds to nothing |
 | Schema validation | `pydantic` | Enforces the LLM output contract |
 | Dashboard | **React + Vite + TypeScript** | Cleaner demo surface than Streamlit. See §16. |
 | UI components | Tailwind + shadcn/ui | Professional tables and badges with no CSS files |
@@ -1275,7 +1275,7 @@ Our retrieval questions all have exact right answers:
 
 | Cache | What it does | When |
 |---|---|---|
-| **Prompt caching** | The Anthropic API can cache a stable prompt prefix. Our instructions, schema, rules and examples are identical on every call — only the record changes. Large cost and latency saving across a batch. | Phase 4 |
+| **Prompt caching** | The provider can cache a stable prompt prefix, and ours is byte-identical on every call. **Measured: it never engages here** — OpenAI needs a prompt over 1024 tokens and ours is around 670. The request is too cheap to be worth caching. | Phase 4 |
 | **Adjudicator result cache** | Key on a hash of (invoice fields + candidate IDs + scores). Same input → stored answer, no API call. Essential because we re-run the batch many times while tuning thresholds. | Phase 4 |
 | **Normalisation cache** | `functools.lru_cache` on `clean_name()`. One line. | Phase 2 |
 | **Alias / episode cache** | Both tables are small and rarely change. Load into a dict once per batch instead of 85 DB round trips. | Phase 5 |

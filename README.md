@@ -136,6 +136,21 @@ Three layers, all of them plain `if` statements.
 The score does not get a veto.
 Score 0.99 with an unexplained gap of ₹340 is still an exception.
 
+## What the LLM is worth
+
+Measured, not assumed.
+
+Sixteen records land in the band where a model could help. Twelve are held by
+rules a model cannot override — duplicated payments, unexplained short
+payments, bills nobody paid — and three more sit outside the date window.
+**Exactly one is a correct match the model can win.**
+
+So the adjudicator is worth 1.2 points, not double digits. That finding paid
+for itself: the hard rules now run first, and the model is asked only when its
+answer could change the outcome. Sixteen candidate calls become one.
+
+A full 85-record run costs about **2 paise**.
+
 ---
 
 ## How we prove it works
@@ -162,7 +177,7 @@ So we measure missed matches and wrong matches separately, and break both down p
 Everything runs in Docker. Nothing runs on the host.
 
 ```bash
-cp .env.example .env          # add your Anthropic API key
+cp .env.example .env          # add your OpenAI API key
 docker compose up -d          # db, api, web
 ```
 
@@ -211,7 +226,7 @@ claim the same payment unless we built them that way.
 
 ## Stack
 
-Python, PostgreSQL, `rapidfuzz`, `faker`, `pydantic`, Claude via the Anthropic API, FastAPI, React + Vite + TypeScript, Tailwind, shadcn/ui.
+Python, PostgreSQL, `rapidfuzz`, `faker`, `pydantic`, `gpt-4o-mini` via the OpenAI API, FastAPI, React + Vite + TypeScript, Tailwind, shadcn/ui.
 
 **No agent framework.**
 The pipeline is plain Python functions.

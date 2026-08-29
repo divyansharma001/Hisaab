@@ -26,8 +26,8 @@ services:
       target: dev
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-hisaab}:${POSTGRES_PASSWORD:-hisaab}@db:5432/${POSTGRES_DB:-hisaab}
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       LLM_CALL_BUDGET: ${LLM_CALL_BUDGET:-40}
       RANDOM_SEED: ${RANDOM_SEED:-20260829}
       LOG_LEVEL: ${LOG_LEVEL:-info}
