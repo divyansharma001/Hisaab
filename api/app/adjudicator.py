@@ -96,21 +96,37 @@ Rules you must follow:
    allowed to take effect, so do not try to account for policy, limits or
    approval thresholds.
 
-What the deduction labels mean:
+How to read each candidate:
 
-- MDR_GST: the payment gateway kept its fee, plus 18% GST on that fee.
-- TDS_2PCT / TDS_10PCT: the customer withheld tax at source, as Indian law
-  requires. They legally send less than the invoice.
-- exact: the amount matched to the rupee.
+- "amount status" is the finding that matters most.
+    EXPLAINED means the difference between the invoice and the payment is
+    fully accounted for by a known deduction. The invoice amount minus that
+    deduction equals the payment to the rupee. This is a strong match, and the
+    payment being smaller than the invoice is expected, not a problem.
+    NOT EXPLAINED means money is missing that nothing accounts for.
+- "amount working" shows the arithmetic behind that status. It has already
+  been checked. Do not redo it.
+- "name match" is 0 to 1. Bank narrations truncate and drop spaces, so 0.7 on
+  a customer whose known bank names are listed above is a good match, not a
+  weak one.
+- "date match" is 0 to 1, measured from the due date. Paying late is normal.
+
+Why a payment may be smaller or larger than the invoice:
+
+- The gateway kept its fee plus 18% GST on that fee.
+- The customer withheld tax at source, as Indian law requires, so they legally
+  send less.
 - A combined payment settles several invoices at once, so it is larger than
   any one of them.
 - A partial payment is one instalment, so it is smaller than the invoice.
 
-Good evidence: the counterparty name matching a known alias, a gap that a named
-deduction explains exactly, a payment date close to the due date.
+Choose the candidate whose amount status is EXPLAINED and whose name matches
+the customer. If two candidates both fit, or none does, return null.
 
-Weak evidence: a similar amount with no explanation for the difference, a name
-that merely starts with the same letters, timing alone."""
+About confidence: it is your own belief that the payment you chose is the right
+one, from 0 to 1. It is not a copy of any score in the input. If one candidate
+has an EXPLAINED amount and a matching customer and the others do not, you are
+confident - say so. If you return null, confidence is 0."""
 
 
 def build_prompt(
@@ -146,14 +162,14 @@ def build_prompt(
         signals = scored.signals
         lines += [
             f"  {scored.id}",
-            f"    bank text     {scored.txn.description_raw}",
-            f"    amount        {fmt(scored.txn.amount_paise)}",
-            f"    paid on       {scored.txn.value_date}",
-            f"    our score     {scored.score:.2f}",
-            f"    amount check  {scored.amount.basis}",
-            f"    name match    {_pct(signals.name)}",
-            f"    date match    {_pct(signals.date)}",
-            f"    reference     {_pct(signals.reference)}",
+            f"    bank text      {scored.txn.description_raw}",
+            f"    amount         {fmt(scored.txn.amount_paise)}",
+            f"    paid on        {scored.txn.value_date}",
+            f"    amount status  {_amount_status(scored)}",
+            f"    amount working {scored.amount.basis}",
+            f"    name match     {_pct(signals.name)}",
+            f"    date match     {_pct(signals.date)}",
+            f"    reference      {_pct(signals.reference)}",
             "",
         ]
 
@@ -168,6 +184,24 @@ def build_prompt(
 
 def _pct(value: float | None) -> str:
     return "not available" if value is None else f"{value:.2f}"
+
+
+def _amount_status(scored: Scored) -> str:
+    """Say what the arithmetic *means*, not only what it was.
+
+    The working alone was not enough: shown a line reading
+    `Rs 2,53,950 - Rs 5,079 MDR - Rs 914.22 GST = Rs 2,47,956.78`, a small
+    model still answered that no candidate matched the invoice amount. It read
+    the numbers and missed the conclusion. Stating the conclusion in one word
+    is what fixed it.
+    """
+    if scored.amount.score >= 0.95:
+        return "EXPLAINED - the gap is fully accounted for"
+    if scored.amount.score >= 0.85:
+        return "EXPLAINED - this payment is part of a group that adds up"
+    if scored.amount.score >= 0.3:
+        return "NOT EXPLAINED - money is missing that nothing accounts for"
+    return "NOT EXPLAINED - the amount does not fit this invoice"
 
 
 def cache_key(invoice: NormInvoice, candidates: list[Scored]) -> str:
@@ -287,7 +321,7 @@ class Adjudicator:
                 else 0
             ),
         )
-        raw = response.to_json()
+        raw = response.to_json(warnings=False)
 
         choice = response.choices[0] if response.choices else None
         answer = choice.message.parsed if choice else None

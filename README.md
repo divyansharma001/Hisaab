@@ -136,20 +136,46 @@ Three layers, all of them plain `if` statements.
 The score does not get a veto.
 Score 0.99 with an unexplained gap of ₹340 is still an exception.
 
-## What the LLM is worth
+## Results
 
-Measured, not assumed.
+On the 85 held-out records, measured against the answer key:
 
-Sixteen records land in the band where a model could help. Twelve are held by
-rules a model cannot override — duplicated payments, unexplained short
-payments, bills nobody paid — and three more sit outside the date window.
-**Exactly one is a correct match the model can win.**
+| | |
+|---|---|
+| Wrong auto-approvals | **0** |
+| Auto-approval precision | **100%** |
+| Outcome accuracy | **100%** |
+| Straight-through | **72.9%** (62 of 85) |
+| Missed exceptions | 0 |
+| Time | 2.1s for 85 records |
+| Cost | **₹0.02 per run**, ₹0.24 per 1,000 records |
 
-So the adjudicator is worth 1.2 points, not double digits. That finding paid
-for itself: the hard rules now run first, and the model is asked only when its
-answer could change the outcome. Sixteen candidate calls become one.
+72.9% is not a number we tuned towards — it is the ceiling. 62 of the 85
+records are the ones that *should* be automated; the other 23 genuinely need a
+human. Anything above 62 would be a wrong approval, not an improvement.
 
-A full 85-record run costs about **2 paise**.
+## What each layer actually bought
+
+Every row is a real run on the same records.
+
+| Configuration | Straight-through | Accuracy | Wrong approvals |
+|---|---|---|---|
+| Scoring only | 84.7% | 85.9% | **11** |
+| + guardrails | 0.0% | 12.9% | 0 |
+| + memory | 71.8% | 98.8% | 0 |
+| + LLM adjudicator | **72.9%** | **100%** | 0 |
+
+Two things worth reading off that table.
+
+**Guardrails without memory reach 0%.** Every customer looks new, so nothing
+can be automated. Guardrails without memory are useless and memory without
+guardrails is pointless — neither number means anything alone.
+
+**The LLM is worth 1.2 points.** Sixteen records land in the band where a model
+could help, but twelve are held by rules it cannot override and three sit
+outside the date window. Exactly one is a correct match it can win, and it wins
+it. So the whole batch takes **one** LLM call, because the hard rules run first
+and the model is only asked when its answer could change the outcome.
 
 ---
 
