@@ -1,7 +1,8 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
-COPY package.json ./
-RUN npm install
+# The lockfile is copied too, so npm ci installs exact pinned versions.
+COPY package.json package-lock.json ./
+RUN npm ci
 
 
 # Dev runs the Vite server. Source arrives by bind mount.

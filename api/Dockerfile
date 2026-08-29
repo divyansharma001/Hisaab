@@ -7,8 +7,9 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+# The lock file pins transitive dependencies too, so the image is reproducible.
+COPY requirements.txt requirements.lock.txt ./
+RUN pip install -r requirements.txt -c requirements.lock.txt
 
 
 # Stage 2: only the venv and the source ship.
