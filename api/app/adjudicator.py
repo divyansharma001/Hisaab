@@ -266,6 +266,7 @@ class Adjudicator:
         ranking: Ranking,
         use_cache: bool = True,
         tags: set[str] | None = None,
+        temperature: float | None = None,
     ) -> Verdict:
         candidates = ranking.candidates[:TOP_N]
         if not candidates:
@@ -287,7 +288,7 @@ class Adjudicator:
         prompt = build_prompt(invoice, candidates, self.memory, tags)
 
         try:
-            verdict = self._ask(prompt, {c.id for c in candidates})
+            verdict = self._ask(prompt, {c.id for c in candidates}, temperature)
         except openai.APIError as exc:
             return Verdict(rejected=f"API_ERROR: {type(exc).__name__}", prompt=prompt)
 
@@ -303,7 +304,9 @@ class Adjudicator:
         wait=wait_exponential(min=1, max=10),
         reraise=True,
     )
-    def _ask(self, prompt: str, valid_ids: set[str]) -> Verdict:
+    def _ask(
+        self, prompt: str, valid_ids: set[str], temperature: float | None = None
+    ) -> Verdict:
         # Chat completions rather than the Responses API, because that is what
         # OpenAI-compatible gateways actually implement. `response_format`
         # carries the schema, so the reply is valid JSON in our shape or the
@@ -321,6 +324,10 @@ class Adjudicator:
             ],
             response_format=Adjudication,
             max_completion_tokens=1024,
+            # Left unset for real runs. The self-consistency test raises it on
+            # purpose: at temperature 0 the answers are near-identical by
+            # construction and the test proves nothing. Section 18, bug 9.
+            **({"temperature": temperature} if temperature is not None else {}),
         )
 
         usage = dict(

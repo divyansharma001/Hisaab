@@ -254,3 +254,42 @@ def test_the_weight_search_is_not_a_flat_line():
 
     assert best > 50.0, f"the search tops out at {best}%, so it is measuring nothing"
     assert sensitivity(trials)[1] > 50.0
+
+
+# --- the frozen regression set ----------------------------------------------
+
+
+def test_no_decision_drifted_from_the_frozen_baseline():
+    """Plan section 8.6. Ordinary unit testing, where the unit is a whole
+    pipeline decision.
+
+    This asks "did anything change", not "were we right" - the eval asks the
+    second. A refactor that improves a number should still surface here, so it
+    gets looked at rather than absorbed silently.
+    """
+    from app import regression
+
+    frozen = regression.load()
+    assert frozen, "no baseline; run freeze.py --write"
+
+    drifts = regression.compare(frozen, regression.current())
+    assert not drifts, "\n".join(str(d) for d in drifts)
+
+
+def test_the_baseline_covers_every_scenario(batch):
+    from app import regression
+
+    frozen = regression.load()
+    covered = {row["scenario"] for row in frozen.values()}
+    assert covered == {i.scenario for i in batch.invoices}
+
+
+def test_the_baseline_check_actually_detects_a_change():
+    """A regression file that cannot fail is not a regression file."""
+    from app import regression
+
+    frozen = regression.load()
+    key = sorted(frozen)[0]
+    tampered = {**frozen, key: {**frozen[key], "outcome": "TAMPERED"}}
+
+    assert regression.compare(tampered, regression.current())

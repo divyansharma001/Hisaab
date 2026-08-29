@@ -24,6 +24,9 @@ dist/
 out/
 *.log
 
+# The regression baseline is deliberately tracked.
+!**/tests/frozen_decisions.json
+
 # OS and editors
 .DS_Store
 .idea/

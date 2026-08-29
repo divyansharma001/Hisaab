@@ -259,3 +259,47 @@ def print_report(result: RunResult, metrics: Metrics, label: str = "") -> None:
                 f"  {j.invoice_id}  {j.scenario:<22} expected {j.expected.value} "
                 f"{j.expected_txns} but auto-approved {j.actual_txns}"
             )
+
+    print_money(metrics)
+    print_throughput(result, metrics)
+    print_exceptions(metrics)
+
+
+def print_money(metrics: Metrics) -> None:
+    """Counting records treats a Rs 500 invoice the same as a Rs 5,00,000 one.
+    Finance people do not. Plan section 19.2."""
+    print("\nBy money, not by record")
+    print(f"  Settled automatically     {fmt(metrics.value_auto)}"
+          f"   ({metrics.straight_through_by_value:.1f}% of the batch)")
+    print(f"  Waiting on a human        {fmt(metrics.value_held)}")
+    print("                            ^ money the business cannot currently account for")
+
+
+def print_throughput(result, metrics: Metrics) -> None:
+    """Throughput is literally in the track brief. Plan section 19.5."""
+    per_second = metrics.total / result.seconds if result.seconds else 0
+    minutes_by_hand = metrics.total * 3
+    print("\nThroughput")
+    print(f"  {metrics.total} records in {result.seconds:.2f}s"
+          f"   ({per_second:.0f} per second)")
+    print(f"  LLM calls                 {result.llm_calls} of {metrics.total}"
+          f"   ({result.llm_calls / metrics.total * 100:.0f}%)")
+    print(f"  By hand at 3 min each     about {minutes_by_hand // 60} hours")
+
+
+def print_exceptions(metrics: Metrics, limit: int = 8) -> None:
+    """Every unresolved record, with a reason code and its evidence.
+
+    The demo opens on this, not on the headline. Plan section 17.
+    """
+    held = [j for j in metrics.judgements if j.actual is not Outcome.AUTO]
+    if not held:
+        return
+
+    print(f"\nWhat we could not do ({len(held)} records)")
+    print(f"  {'invoice':<11} {'amount':>15}  {'reason':<24} outcome")
+    for j in sorted(held, key=lambda x: -x.amount_paise)[:limit]:
+        print(f"  {j.invoice_id:<11} {fmt(j.amount_paise):>15}  "
+              f"{(j.actual_reason or '-'):<24} {j.actual.value}")
+    if len(held) > limit:
+        print(f"  ... and {len(held) - limit} more")

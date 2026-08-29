@@ -1,0 +1,284 @@
+{
+  "INV-0001": {
+    "margin": 0.57,
+    "outcome": "AUTO",
+    "reason_code": "MATCHED_REFERENCE",
+    "scenario": "exact_reference",
+    "score": 1.0,
+    "txn_ids": [
+      "TXN-0001"
+    ]
+  },
+  "INV-0002": {
+    "margin": 0.71,
+    "outcome": "AUTO",
+    "reason_code": "MATCHED_REFERENCE",
+    "scenario": "exact_reference",
+    "score": 1.0,
+    "txn_ids": [
+      "TXN-0002"
+    ]
+  },
+  "INV-0019": {
+    "margin": 0.49,
+    "outcome": "AUTO",
+    "reason_code": "MATCHED_NAME_AMOUNT",
+    "scenario": "clean_name_amount",
+    "score": 0.99,
+    "txn_ids": [
+      "TXN-0019"
+    ]
+  },
+  "INV-0020": {
+    "margin": 0.56,
+    "outcome": "AUTO",
+    "reason_code": "MATCHED_NAME_AMOUNT",
+    "scenario": "clean_name_amount",
+    "score": 1.0,
+    "txn_ids": [
+      "TXN-0020"
+    ]
+  },
+  "INV-0029": {
+    "margin": 0.38,
+    "outcome": "AUTO",
+    "reason_code": "MATCHED_NAME_AMOUNT",
+    "scenario": "alias_variation",
+    "score": 0.99,
+    "txn_ids": [
+      "TXN-0029"
+    ]
+  },
+  "INV-0030": {
+    "margin": 0.41,
+    "outcome": "AUTO",
+    "reason_code": "MATCHED_NAME_AMOUNT",
+    "scenario": "alias_variation",
+    "score": 1.0,
+    "txn_ids": [
+      "TXN-0030"
+    ]
+  },
+  "INV-0037": {
+    "margin": 0.65,
+    "outcome": "AUTO",
+    "reason_code": "TDS_2PCT",
+    "scenario": "tds_deduction",
+    "score": 0.97,
+    "txn_ids": [
+      "TXN-0037"
+    ]
+  },
+  "INV-0038": {
+    "margin": 0.44,
+    "outcome": "AUTO",
+    "reason_code": "TDS_2PCT",
+    "scenario": "tds_deduction",
+    "score": 0.97,
+    "txn_ids": [
+      "TXN-0038"
+    ]
+  },
+  "INV-0043": {
+    "margin": 0.54,
+    "outcome": "AUTO",
+    "reason_code": "MDR_GST",
+    "scenario": "gateway_fee",
+    "score": 0.97,
+    "txn_ids": [
+      "TXN-0043"
+    ]
+  },
+  "INV-0044": {
+    "margin": 0.44,
+    "outcome": "AUTO",
+    "reason_code": "MDR_GST",
+    "scenario": "gateway_fee",
+    "score": 0.97,
+    "txn_ids": [
+      "TXN-0044"
+    ]
+  },
+  "INV-0048": {
+    "margin": 0.54,
+    "outcome": "AUTO",
+    "reason_code": "PARTIAL_PAYMENT",
+    "scenario": "partial_payment",
+    "score": 0.93,
+    "txn_ids": [
+      "TXN-0048",
+      "TXN-0049"
+    ]
+  },
+  "INV-0049": {
+    "margin": 0.82,
+    "outcome": "AUTO",
+    "reason_code": "PARTIAL_PAYMENT",
+    "scenario": "partial_payment",
+    "score": 0.91,
+    "txn_ids": [
+      "TXN-0050",
+      "TXN-0051"
+    ]
+  },
+  "INV-0053": {
+    "margin": 0.34,
+    "outcome": "EXCEPTION",
+    "reason_code": "BELOW_THRESHOLD",
+    "scenario": "combined_payment",
+    "score": 0.9,
+    "txn_ids": [
+      "TXN-0058"
+    ]
+  },
+  "INV-0054": {
+    "margin": 0.64,
+    "outcome": "EXCEPTION",
+    "reason_code": "BELOW_THRESHOLD",
+    "scenario": "combined_payment",
+    "score": 0.9,
+    "txn_ids": [
+      "TXN-0058"
+    ]
+  },
+  "INV-0057": {
+    "margin": 0.34,
+    "outcome": "AUTO",
+    "reason_code": "MDR_GST",
+    "scenario": "batched_settlement",
+    "score": 0.91,
+    "txn_ids": [
+      "TXN-0060"
+    ]
+  },
+  "INV-0058": {
+    "margin": 0.63,
+    "outcome": "AUTO",
+    "reason_code": "MDR_GST",
+    "scenario": "batched_settlement",
+    "score": 0.97,
+    "txn_ids": [
+      "TXN-0061"
+    ]
+  },
+  "INV-0063": {
+    "margin": 0.0,
+    "outcome": "REVIEW",
+    "reason_code": "DUPLICATE_TRANSACTION",
+    "scenario": "duplicate_transaction",
+    "score": 0.98,
+    "txn_ids": [
+      "TXN-0068"
+    ]
+  },
+  "INV-0064": {
+    "margin": 0.0,
+    "outcome": "REVIEW",
+    "reason_code": "DUPLICATE_TRANSACTION",
+    "scenario": "duplicate_transaction",
+    "score": 0.98,
+    "txn_ids": [
+      "TXN-0070"
+    ]
+  },
+  "INV-0067": {
+    "margin": 0.32,
+    "outcome": "EXCEPTION",
+    "reason_code": "AMOUNT_GAP_UNEXPLAINED",
+    "scenario": "short_payment",
+    "score": 0.77,
+    "txn_ids": [
+      "TXN-0076"
+    ]
+  },
+  "INV-0068": {
+    "margin": 0.4,
+    "outcome": "EXCEPTION",
+    "reason_code": "AMOUNT_GAP_UNEXPLAINED",
+    "scenario": "short_payment",
+    "score": 0.8,
+    "txn_ids": [
+      "TXN-0077"
+    ]
+  },
+  "INV-0071": {
+    "margin": 0.06,
+    "outcome": "EXCEPTION",
+    "reason_code": "AMOUNT_GAP_UNEXPLAINED",
+    "scenario": "no_payment",
+    "score": 0.29,
+    "txn_ids": [
+      "TXN-0018"
+    ]
+  },
+  "INV-0072": {
+    "margin": 0.0,
+    "outcome": "EXCEPTION",
+    "reason_code": "AMOUNT_GAP_UNEXPLAINED",
+    "scenario": "no_payment",
+    "score": 0.31,
+    "txn_ids": [
+      "TXN-0080"
+    ]
+  },
+  "INV-0076": {
+    "margin": 0.61,
+    "outcome": "AMBIGUOUS",
+    "reason_code": "AMBIGUOUS_CANDIDATES",
+    "scenario": "identical_invoices",
+    "score": 0.98,
+    "txn_ids": [
+      "TXN-0080"
+    ]
+  },
+  "INV-0077": {
+    "margin": 0.61,
+    "outcome": "AMBIGUOUS",
+    "reason_code": "AMBIGUOUS_CANDIDATES",
+    "scenario": "identical_invoices",
+    "score": 0.98,
+    "txn_ids": [
+      "TXN-0080"
+    ]
+  },
+  "INV-0080": {
+    "margin": 0.45,
+    "outcome": "EXCEPTION",
+    "reason_code": "DATE_OUT_OF_WINDOW",
+    "scenario": "date_out_of_window",
+    "score": 0.8,
+    "txn_ids": [
+      "TXN-0082"
+    ]
+  },
+  "INV-0081": {
+    "margin": 0.36,
+    "outcome": "EXCEPTION",
+    "reason_code": "DATE_OUT_OF_WINDOW",
+    "scenario": "date_out_of_window",
+    "score": 0.8,
+    "txn_ids": [
+      "TXN-0083"
+    ]
+  },
+  "INV-0083": {
+    "margin": 0.65,
+    "outcome": "REVIEW",
+    "reason_code": "VALUE_CEILING",
+    "scenario": "value_ceiling",
+    "score": 0.99,
+    "txn_ids": [
+      "TXN-0085"
+    ]
+  },
+  "INV-0084": {
+    "margin": 1.0,
+    "outcome": "REVIEW",
+    "reason_code": "VALUE_CEILING",
+    "scenario": "value_ceiling",
+    "score": 1.0,
+    "txn_ids": [
+      "TXN-0086"
+    ]
+  }
+}
