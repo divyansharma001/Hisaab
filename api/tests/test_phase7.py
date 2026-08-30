@@ -150,3 +150,110 @@ def test_thresholds_endpoint_shows_both_curves(client):
     assert body["current_bar"] == 0.90
     assert all(p["wrong"] == 0 for p in body["with_rules"])
     assert body["cost_of_the_rules"]["wrong_approvals_prevented"] > 0
+
+
+# --- 19.1 the ablation table ------------------------------------------------
+
+
+def test_each_layer_is_a_real_run(client):
+    body = client.get("/api/ablation").json()
+    layers = [r["layer"] for r in body["rows"]]
+
+    assert layers == [
+        "Scoring alone, nothing remembered",
+        "Plus our checks, still nothing remembered",
+        "Plus what we remember - the system as shipped",
+    ]
+    assert body["rows"][0]["wrong"] > 0, "scoring alone should be unsafe"
+    assert body["rows"][-1]["wrong"] == 0, "the shipped config must be safe"
+    for row in body["rows"]:
+        assert row["explanation"], f"{row['layer']} has a number with no explanation"
+
+
+# --- 19.3 the learning loop -------------------------------------------------
+
+
+@pytest.fixture
+def scratch_alias():
+    """Remove anything a confirmation test wrote.
+
+    These tests insert into the real aliases table, and a row left behind
+    would quietly join the memory of every later run in this database.
+    """
+    import psycopg
+
+    from app.config import get_settings
+
+    yield
+    with psycopg.connect(get_settings().database_url) as conn:
+        conn.execute("DELETE FROM aliases WHERE canonical_name LIKE 'TEST %%'")
+        conn.commit()
+
+
+def test_confirming_a_graded_record_never_feeds_a_graded_run(scratch_alias):
+    """The whole eval rests on this.
+
+    A confirmation made while working the graded batch is kept, because the
+    next real batch should have it. It must not come back into the run we
+    score ourselves.
+    """
+    from app.memory import build_from_split, confirm_match
+
+    confirm_match(
+        canonical_name="TEST GRADED CO",
+        bank_text="NEFT/TESTGRADEDCO/HDFC0001234",
+        source_split=Split.HELDOUT,
+    )
+    assert "TEST GRADED CO" not in build_from_split().variants
+
+
+def test_a_confirmation_from_a_safe_split_does_come_back(scratch_alias):
+    """The other half. If this fails, confirming teaches nothing at all."""
+    from app.memory import build_from_split, confirm_match
+
+    confirm_match(
+        canonical_name="TEST TUNING CO",
+        bank_text="NEFT/TESTTUNINGCO/HDFC0001234",
+        source_split=Split.TUNING,
+    )
+    assert "TEST TUNING CO" in build_from_split().variants
+
+
+def test_the_learning_demo_actually_improves(client):
+    """A demo that shows no change is not showing the loop."""
+    body = client.get("/api/learning").json()
+
+    assert body["confirmed"] > 0, "nothing was held to confirm; the demo is empty"
+    assert body["closed_after"] > body["closed_before"]
+    assert body["note"], "the thinned starting point must be stated on screen"
+
+
+def test_confirm_reports_what_it_changed(client):
+    body = client.post("/api/confirm/INV-0083").json()
+
+    assert body["invoice_id"] == "INV-0083"
+    assert "closes_now" in body and "closed_before" in body
+    assert body["note"]
+
+
+def test_confirming_a_record_with_no_payment_is_refused(client):
+    assert client.post("/api/confirm/INV-9999").status_code == 404
+
+
+# --- 19.8 the case we got wrong ---------------------------------------------
+
+
+def test_mistakes_names_the_records_and_their_direction(client):
+    body = client.get("/api/mistakes").json()
+
+    for mistake in body["mistakes"]:
+        assert mistake["we_said"] != mistake["answer_was"]
+        assert mistake["erred_towards"] in {"holding it back", "closing it"}
+        assert mistake["our_reason"]
+
+    # Being too careful is recoverable; being too confident is not. If this
+    # ever flips, the headline safety claim is no longer true.
+    if body["mistakes"]:
+        assert body["all_in_one_direction"] == all(
+            m["erred_towards"] == "holding it back" for m in body["mistakes"]
+        )

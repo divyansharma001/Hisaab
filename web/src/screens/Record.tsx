@@ -12,7 +12,7 @@ import {
   Tick,
 } from "../components/ui";
 import { useApi } from "../useApi";
-import type { AskAnswer, Signals } from "../types";
+import type { AskAnswer, ConfirmResult, Signals } from "../types";
 import {
   asSentence,
   checkText,
@@ -214,6 +214,10 @@ export function Record({ id, onBack }: { id: string; onBack: () => void }) {
         </div>
       </Card>
 
+      {decision.outcome !== "AUTO" && decision.settled_by.length > 0 && (
+        <Confirm invoiceId={invoice.id} />
+      )}
+
       <Ask invoiceId={invoice.id} />
     </div>
   );
@@ -310,6 +314,81 @@ function Ask({ invoiceId }: { invoiceId: string }) {
                   );
                 })}
               </dl>
+            )}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * "Yes, that is the right payment." Plan section 19.3.
+ *
+ * The click writes what we learned and then re-runs the batch to say what it
+ * actually changed, rather than promising an improvement nobody can see.
+ * Usually on this data the answer is "nothing else" - we already know every
+ * customer - and saying so is better than implying otherwise.
+ */
+function Confirm({ invoiceId }: { invoiceId: string }) {
+  const [result, setResult] = useState<ConfirmResult | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  async function send() {
+    setSaving(true);
+    setFailed(false);
+    try {
+      setResult(await api.confirm(invoiceId));
+    } catch {
+      setFailed(true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHead
+        title="Agree with this match?"
+        note="Confirming teaches us the customer's bank name, so the next batch recognises it."
+      />
+      <div className="px-5 py-4">
+        {result ? (
+          <div>
+            <p className="text-sm leading-relaxed text-ink-1200">
+              Saved.{" "}
+              {result.variant ? (
+                <>
+                  We now know <span className="font-medium">{result.customer}</span> also appears as{" "}
+                  <span className="font-mono text-xs">{result.variant}</span> on the bank statement.
+                </>
+              ) : (
+                "There was no usable customer name in the bank text to learn from."
+              )}
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-ink-700">
+              {result.also_affected.length > 0 ? (
+                <>
+                  That also releases{" "}
+                  <span className="font-medium text-ink-1200">
+                    {result.also_affected.join(", ")}
+                  </span>
+                  .
+                </>
+              ) : (
+                "Nothing else in this batch changes - we already recognised every other customer here."
+              )}
+            </p>
+            <p className="mt-2 text-xs leading-relaxed text-ink-700">{result.note}</p>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={send} disabled={saving}>
+              {saving ? "Saving…" : "Yes, that is the right payment"}
+            </Button>
+            {failed && (
+              <span className="text-sm text-bad-700">Could not save that. Try again.</span>
             )}
           </div>
         )}

@@ -178,9 +178,13 @@ CREATE INDEX exceptions_reason_idx  ON exceptions (reason_code);
 -- Memory. Plain tables, not a vector store. Plan section 15.2.
 CREATE TABLE aliases (
   id              BIGSERIAL PRIMARY KEY,
-  canonical_name  TEXT      NOT NULL,
-  variant_name    TEXT      NOT NULL,
-  confirmed_count INT       NOT NULL DEFAULT 1,
+  canonical_name  TEXT       NOT NULL,
+  variant_name    TEXT       NOT NULL,
+  confirmed_count INT        NOT NULL DEFAULT 1,
+  -- Which batch this confirmation came from. Episodes already carry this so a
+  -- graded run cannot read back examples drawn from the records it is being
+  -- graded on; aliases need the same guard for the same reason.
+  source_split    split_name NOT NULL DEFAULT 'alias_seed',
   UNIQUE (canonical_name, variant_name)
 );
 

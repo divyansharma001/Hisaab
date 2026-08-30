@@ -35,6 +35,9 @@ def main() -> int:
         eval_breakdown,
         exceptions,
         latest_run,
+        ablation,
+        learning,
+        mistakes,
         record,
         thresholds,
     )
@@ -49,6 +52,9 @@ def main() -> int:
         "cash": cash(),
         "adjudicated": adjudicated(),
         "thresholds": thresholds(),
+        "ablation": ablation(),
+        "mistakes": mistakes(),
+        "learning": learning(),
     }
 
     # Every row the UI can click has to have a trace in here, or the offline

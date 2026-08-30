@@ -132,8 +132,22 @@ def build_from_split(split: Split = Split.ALIAS_SEED, database_url: str | None =
         # Never read back examples drawn from the records we are about to grade.
         memory.episodes = load_episodes(conn, exclude=Split.HELDOUT)
 
+        # Aliases a reviewer confirmed by hand, under the same rule. A name
+        # confirmed while working the graded batch is real knowledge, but
+        # feeding it back into the run we score would flatter the number, so
+        # the graded split is excluded here exactly as it is for episodes.
+        confirmed = conn.execute(
+            """SELECT canonical_name, variant_name, confirmed_count
+               FROM aliases WHERE source_split <> %s""",
+            (Split.HELDOUT.value,),
+        ).fetchall()
+
     for canonical, description in rows:
         _record(memory, canonical, description)
+
+    for canonical, variant, count in confirmed:
+        memory.variants.setdefault(canonical, set()).add(variant)
+        memory.confirmations[canonical] = memory.confirmations.get(canonical, 0) + count
 
     return memory.snapshot()
 
@@ -247,11 +261,13 @@ def persist(memory: Memory, database_url: str | None = None) -> dict[str, int]:
         for canonical, forms in memory.variants.items():
             for variant in forms:
                 conn.execute(
-                    """INSERT INTO aliases (canonical_name, variant_name, confirmed_count)
-                       VALUES (%s, %s, %s)
+                    """INSERT INTO aliases
+                           (canonical_name, variant_name, confirmed_count, source_split)
+                       VALUES (%s, %s, %s, %s)
                        ON CONFLICT (canonical_name, variant_name)
                        DO UPDATE SET confirmed_count = aliases.confirmed_count + 1""",
-                    (canonical, variant, memory.confirmations.get(canonical, 1)),
+                    (canonical, variant, memory.confirmations.get(canonical, 1),
+                     Split.ALIAS_SEED.value),
                 )
 
         for episode in memory.episodes:
@@ -273,3 +289,52 @@ def persist(memory: Memory, database_url: str | None = None) -> dict[str, int]:
         }
 
     return counts
+
+
+def confirm_match(
+    canonical_name: str,
+    bank_text: str,
+    source_split: Split,
+    episode: Episode | None = None,
+    database_url: str | None = None,
+) -> dict:
+    """Record one reviewer saying "yes, that is the right payment".
+
+    Adds a single row rather than rewriting the store, because `persist`
+    truncates and this runs while somebody is working the queue.
+
+    The row carries the batch it came from. A confirmation made on the graded
+    set is kept - it is real knowledge and the next real batch should have it -
+    but `build_from_split` will not read it back into a graded run. Learning
+    from the records you are being marked on is how an eval quietly stops
+    meaning anything.
+    """
+    url = database_url or get_settings().database_url
+    variant = name_from_bank_text(bank_text) or ""
+    if not variant:
+        return {"alias_written": False, "reason": "no usable name in the bank text"}
+
+    with psycopg.connect(url) as conn:
+        conn.execute(
+            """INSERT INTO aliases
+                   (canonical_name, variant_name, confirmed_count, source_split)
+               VALUES (%s, %s, 1, %s)
+               ON CONFLICT (canonical_name, variant_name)
+               DO UPDATE SET confirmed_count = aliases.confirmed_count + 1""",
+            (canonical_name, variant, source_split.value),
+        )
+        if episode is not None:
+            conn.execute(
+                """INSERT INTO episodes (situation_text, resolution_text, tags, source_split)
+                   VALUES (%s, %s, %s, %s)""",
+                (episode.situation, episode.resolution, list(episode.tags),
+                 episode.source_split.value),
+            )
+        conn.commit()
+
+    return {
+        "alias_written": True,
+        "canonical": canonical_name,
+        "variant": variant,
+        "counts_towards_graded_runs": source_split is not Split.HELDOUT,
+    }

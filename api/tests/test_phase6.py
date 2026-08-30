@@ -260,6 +260,9 @@ def test_snapshot_has_every_field_the_live_api_returns(client):
         ("cash", "/api/cash-position"),
         ("adjudicated", "/api/adjudicated"),
         ("thresholds", "/api/thresholds"),
+        ("ablation", "/api/ablation"),
+        ("mistakes", "/api/mistakes"),
+        ("learning", "/api/learning"),
     ):
         assert key in saved, f"snapshot is missing {key}"
         live = client.get(path).json()

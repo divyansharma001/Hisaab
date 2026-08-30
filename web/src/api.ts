@@ -1,6 +1,10 @@
 import type {
+  Ablation,
   AdjudicatedList,
   AskAnswer,
+  ConfirmResult,
+  Learning,
+  Mistakes,
   CashPosition,
   EvalBreakdown,
   ExceptionList,
@@ -63,7 +67,16 @@ export const api = {
   adjudicated: () => get<AdjudicatedList>("/api/adjudicated", "adjudicated"),
   cash: () => get<CashPosition>("/api/cash-position", "cash"),
   thresholds: () => get<Thresholds>("/api/thresholds", "thresholds"),
+  ablation: () => get<Ablation>("/api/ablation", "ablation"),
+  mistakes: () => get<Mistakes>("/api/mistakes", "mistakes"),
+  learning: () => get<Learning>("/api/learning", "learning"),
   trace: (id: string) => get<Trace>(`/api/records/${id}`, `trace_${id}`),
+  // Confirming changes state, so it never falls back to a snapshot.
+  confirm: async (invoiceId: string): Promise<ConfirmResult> => {
+    const res = await fetch(`${API_URL}/api/confirm/${invoiceId}`, { method: "POST" });
+    if (!res.ok) throw new Error(`${res.status}`);
+    return res.json();
+  },
   // Asking is a live question, so there is no snapshot to fall back on.
   ask: async (question: string): Promise<AskAnswer> => {
     const res = await fetch(`${API_URL}/api/ask`, {

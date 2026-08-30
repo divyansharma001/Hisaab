@@ -1436,7 +1436,7 @@ the usual demo — **we lead with what we couldn't solve.**
 
 ## 18. Pre-build bug sweep
 
-Thirteen bugs found reviewing this plan before implementation, plus one found by building it.
+Thirteen bugs found reviewing this plan before implementation, plus two found by building it.
 All are fixed above; this is the record of what they were, because the same mistakes are easy to
 reintroduce while coding.
 
@@ -1540,6 +1540,24 @@ The rules cost about thirteen points of automation and take wrong approvals from
 
 The slider was going to be a flat line labelled as a trade-off.
 It now draws both curves, and the gap between them is the actual finding.
+
+
+**15. The learning demo claimed a cascade the data cannot produce.**
+Section 19.3 scripts the moment as: confirm one match, re-run, "the same pattern now auto-resolves,
+**and two other records resolve too**".
+
+Measured, one confirmation closes exactly one record. The knock-on never happens, and not because
+the mechanism is broken: an alias released for a customer would release every held invoice of
+theirs, but at this thinning each customer has only one held invoice, so there is no sibling to
+release.
+
+Worse, with the memory we actually ship the demo has nothing to show at all. The alias seed covers
+every customer three times over, so **no record is ever held for being a new customer** and
+confirming a name unblocks nothing.
+
+The endpoint therefore starts from half the history and says so on the screen. Beginning from a
+rigged state and not mentioning it would be the dishonest version of this demo, and the honest
+version still reads well: 29 records close on their own, 39 names get confirmed, 59 close.
 
 
 ## 19. Winning margin — seven additions

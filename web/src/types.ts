@@ -171,3 +171,60 @@ export type Thresholds = {
   };
   finding: string;
 };
+
+export type AblationRow = {
+  layer: string;
+  explanation: string;
+  closed: number;
+  accuracy: number;
+  wrong: number;
+  closed_change: number | null;
+  wrong_change: number | null;
+};
+
+export type Ablation = { rows: AblationRow[]; records: number };
+
+export type Mistake = {
+  invoice_id: string;
+  customer: string;
+  amount: Money;
+  scenario: string;
+  we_said: Outcome;
+  answer_was: Outcome;
+  our_reason: string;
+  asked_the_assistant: boolean;
+  erred_towards: string;
+};
+
+export type Mistakes = {
+  count: number;
+  mistakes: Mistake[];
+  all_in_one_direction: boolean;
+};
+
+export type Learning = {
+  customers_known_at_the_start: number;
+  customers_in_the_batch: number;
+  held_as_new: { invoice_id: string; customer: string; amount: Money }[];
+  confirmed: number;
+  closed_before: number;
+  closed_after: number;
+  newly_closing: string[];
+  knock_on: string[];
+  records: number;
+  note: string;
+  knock_on_note: string;
+};
+
+export type ConfirmResult = {
+  invoice_id: string;
+  customer: string;
+  alias_written: boolean;
+  variant?: string;
+  counts_towards_graded_runs?: boolean;
+  closes_now: number;
+  closed_before: number;
+  newly_closing: string[];
+  also_affected: string[];
+  note: string;
+};
