@@ -43,6 +43,10 @@
   --color-warn-500: hsl(23 92% 53%);
   --color-warn-600: hsl(25 100% 44%);
   --color-warn-700: hsl(25 100% 39%);
+  /* cider 800. warn-700 on warn-50 measured 4.22:1, under the 4.5
+     that 11px text needs, and this is the most common pill on the
+     busiest screen. */
+  --color-warn-800: hsl(25 100% 30%);
 
   /* sapphire - informational, and anything the assistant touched */
   --color-info-50: hsl(198 85% 95%);

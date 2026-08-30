@@ -42,7 +42,11 @@ export function Queue({ onOpen }: { onOpen: (id: string) => void }) {
         />
       ) : (
         <Card>
-          <div className="overflow-x-auto">
+          {/* A table on wide screens; stacked rows on narrow ones.
+              At 500px the table pushed "what is wrong" 338px off-screen -
+              the one column a reviewer opens this list to read. A table whose
+              point is out of view is worse than no table. */}
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-ink-200 bg-ink-50 text-left">
@@ -76,7 +80,7 @@ export function Queue({ onOpen }: { onOpen: (id: string) => void }) {
                         onOpen(row.invoice_id);
                       }
                     }}
-                    className="cursor-pointer transition-colors duration-150 hover:bg-brand-50/60"
+                    className="cursor-pointer transition-colors duration-150 hover:bg-brand-50/60 focus-visible:bg-brand-100 focus-visible:outline-none"
                   >
                     <td className="whitespace-nowrap px-5 py-3 font-mono text-xs font-medium">
                       {row.invoice_id}
@@ -100,6 +104,30 @@ export function Queue({ onOpen }: { onOpen: (id: string) => void }) {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          <div className="divide-y divide-ink-100 md:hidden">
+            {data.exceptions.map((row) => (
+              <button
+                key={row.invoice_id}
+                type="button"
+                onClick={() => onOpen(row.invoice_id)}
+                className="block w-full px-4 py-3.5 text-left transition-colors duration-150 hover:bg-brand-50/60"
+              >
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="font-mono text-xs font-medium">{row.invoice_id}</span>
+                  <span className="tnum whitespace-nowrap text-sm font-medium">
+                    {row.amount.display}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-ink-1200">{row.counterparty}</p>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <StatusPill outcome={row.outcome} />
+                  <ReasonChip>{reasonText(row.reason_code)}</ReasonChip>
+                </div>
+                <p className="mt-1.5 text-xs leading-relaxed text-ink-700">{row.reason_text}</p>
+              </button>
+            ))}
           </div>
         </Card>
       )}

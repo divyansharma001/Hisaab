@@ -13,7 +13,7 @@ type Tone = "good" | "warn" | "bad" | "info" | "neutral" | "brand";
 
 const TINT: Record<Tone, string> = {
   good: "bg-good-50 text-good-700 ring-good-500/20",
-  warn: "bg-warn-50 text-warn-700 ring-warn-600/20",
+  warn: "bg-warn-50 text-warn-800 ring-warn-600/20",
   bad: "bg-bad-50 text-bad-700 ring-bad-600/20",
   info: "bg-info-50 text-info-700 ring-info-600/20",
   brand: "bg-brand-50 text-brand-700 ring-brand-500/20",
@@ -199,6 +199,26 @@ export function Loading({ what }: { what: string }) {
         </div>
       </Card>
     </div>
+  );
+}
+
+/**
+ * A panel that has not arrived yet.
+ *
+ * Several of these run the batch again and land a couple of seconds after the
+ * rest of the page. Rendering nothing until then makes the page grow under
+ * the reader; a placeholder of the right height does not.
+ */
+export function PanelSkeleton({ title, note, rows = 4 }: { title: string; note?: string; rows?: number }) {
+  return (
+    <Card>
+      <CardHead title={title} note={note} />
+      <div className="space-y-3 px-5 py-5" aria-busy="true">
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="h-4 animate-pulse rounded bg-ink-100" />
+        ))}
+      </div>
+    </Card>
   );
 }
 

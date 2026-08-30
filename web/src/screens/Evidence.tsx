@@ -1,5 +1,14 @@
 import { api } from "../api";
-import { Bar, Card, CardHead, Label, Loading, Problem, Stat } from "../components/ui";
+import {
+  Bar,
+  Card,
+  CardHead,
+  Label,
+  Loading,
+  PanelSkeleton,
+  Problem,
+  Stat,
+} from "../components/ui";
 import { useApi } from "../useApi";
 import type {
   Ablation,
@@ -143,17 +152,11 @@ export function Evidence() {
 function SafetyCurve({ data }: { data: Thresholds | null }) {
   if (!data) {
     return (
-      <Card>
-        <CardHead
-          title="What actually keeps this safe"
-          note="Running the batch again at five different strictness settings…"
-        />
-        <div className="space-y-3 px-5 py-5" aria-busy="true">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-4 animate-pulse rounded bg-ink-100" />
-          ))}
-        </div>
-      </Card>
+      <PanelSkeleton
+        title="What actually keeps this safe"
+        note="Running the batch again at five different strictness settings…"
+        rows={5}
+      />
     );
   }
 
@@ -167,7 +170,8 @@ function SafetyCurve({ data }: { data: Thresholds | null }) {
         note="The same batch at five strictness settings, with our checks on and then off. Both columns keep everything we remember, so the only thing changing is the checks."
       />
 
-      <div className="overflow-x-auto">
+      {/* Same rule as the queue: table when there is room, stacked when not. */}
+      <div className="hidden overflow-x-auto sm:block">
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-ink-200 bg-ink-50 text-left">
@@ -221,6 +225,32 @@ function SafetyCurve({ data }: { data: Thresholds | null }) {
         </table>
       </div>
 
+      <div className="divide-y divide-ink-100 sm:hidden">
+        {data.with_rules.map((p) => {
+          const off = bare.get(p.bar);
+          return (
+            <div key={p.bar} className={p.is_current ? "bg-brand-50/60 px-4 py-3" : "px-4 py-3"}>
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="tnum text-sm font-medium">
+                  Strictness {p.bar.toFixed(2)}
+                  {p.is_current && <span className="ml-2 text-xs text-brand-700">in use</span>}
+                </span>
+                <span className="tnum text-sm">
+                  {p.closed}% ·{" "}
+                  <span className="font-medium text-good-600">{p.wrong} wrong</span>
+                </span>
+              </div>
+              {off && (
+                <p className="mt-1 text-xs text-ink-700">
+                  Checks off: {off.closed}% closed,{" "}
+                  <span className="font-medium text-bad-600">{off.wrong} wrong</span>
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
       <p className="border-t border-ink-200 px-5 py-3.5 text-sm leading-relaxed text-ink-700">
         We expected the strictness setting to be the thing protecting us. It is not - with our
         checks on, no setting we tried got a single match wrong. Turning the checks off is what
@@ -246,7 +276,15 @@ function SafetyCurve({ data }: { data: Thresholds | null }) {
  * measurement rather than a claim.
  */
 function Layers({ data }: { data: Ablation | null }) {
-  if (!data) return null;
+  if (!data) {
+    return (
+      <PanelSkeleton
+        title="What each part of it is worth"
+        note="Running the batch again with one layer at a time switched on…"
+        rows={3}
+      />
+    );
+  }
 
   return (
     <Card>
@@ -293,7 +331,7 @@ function Layers({ data }: { data: Ablation | null }) {
  * costs a person a few minutes, being too confident costs money.
  */
 function Mistakes({ data }: { data: MistakesData | null }) {
-  if (!data) return null;
+  if (!data) return <PanelSkeleton title="What we got wrong" rows={2} />;
 
   if (data.count === 0) {
     return (
@@ -357,7 +395,15 @@ function Mistakes({ data }: { data: MistakesData | null }) {
  * nothing to confirm and nothing to show. Section 18, bug 15.
  */
 function Learning({ data }: { data: LearningData | null }) {
-  if (!data) return null;
+  if (!data) {
+    return (
+      <PanelSkeleton
+        title="It gets better as you use it"
+        note="Replaying the batch from half our history…"
+        rows={3}
+      />
+    );
+  }
 
   const gain = data.closed_after - data.closed_before;
 

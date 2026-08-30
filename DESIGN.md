@@ -101,6 +101,14 @@ A single centred column, max 1200px, 24px gutters. No sidebar: there are four de
 - More space above a heading than below it, so a heading belongs to what follows it.
 - Two-column splits are 3:2, not 1:1, so the dense side gets the room it needs.
 
+**Tables become lists below `md`.** Measured at 500px, the queue table pushed
+"what is wrong" 338px off-screen - the one column a reviewer opens the list to
+read. Below the breakpoint every table renders as stacked rows carrying the
+same fields. A table whose point is out of view is worse than no table.
+
+**The tab bar scrolls sideways rather than wrapping.** Four labels wrapping to
+two lines each turned a 36px bar into a 100px block.
+
 ## Elevation & Depth
 
 Almost flat. This is paper on a desk, not floating glass.
@@ -124,21 +132,26 @@ horizontally for the shape to read as a merge.
 
 ## Shapes
 
-- **Radius:** 8px on cards and buttons, 6px on inputs and badges, 4px on bars and chips. Full round only on progress tracks.
+- **Radius:** 8px on cards, 6px on buttons, inputs, pills and chips. Full round on progress tracks.
 - Consistent across every screen. A button in one place is the same shape as a button in another.
 
 ## Components
 
 - **Stat.** A caption, a number, and one line of plain explanation. The explanation is mandatory - a number with no sentence under it is the hero-metric template and is banned.
 - **Card + CardHead.** Every panel. Title, optional one-line note, then content. Never nested.
-- **Status pill.** A word plus its semantic tint, 11px, medium. Four values only: Settled, Needs a look, Doesn't add up, Two invoices.
+- **Status pill.** A word plus its semantic tint, 11px, medium. Four values only: Settled, Needs sign-off, Not matched, Unclear. The warn tint uses cider 800 rather than 700, because 700 measured 4.22:1 on its own ground and 11px text needs 4.5.
 - **Reason chip.** A plain-English phrase, neutral ground. Never the raw constant.
 - **Table.** Sticky-free header on `Desk`, 1px rules between rows, hover tint, whole row clickable with a visible pointer.
 - **Bar.** A 6px track for proportions. Semantic fill. Used for aging and outcome splits only.
 - **Empty state.** Teaches the screen: what would appear here and why it is empty. Never "No data".
 - **Skeleton.** Grey blocks in the real layout while a batch runs, never a centred spinner.
 
-Every interactive element ships default, hover, focus-visible, active, and disabled. Focus-visible is a 2px azure ring at 2px offset, everywhere, no exceptions.
+Every interactive element ships default, hover, focus-visible, active, and disabled. Focus-visible is a 2px azure ring at 2px offset.
+
+**The one exception is a table row.** Chrome paints an outline on a
+`display: table-row` as a sliver along its bottom edge, so the shared ring is
+effectively invisible there. Focused rows take an azure background tint
+instead - a stronger cue than the hover state it has to out-rank.
 
 ## Do's and Don'ts
 

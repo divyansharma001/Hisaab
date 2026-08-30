@@ -60,7 +60,7 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
-            <nav className="flex rounded-lg bg-ink-50 p-0.5 ring-1 ring-inset ring-ink-200">
+            <nav className="flex max-w-full overflow-x-auto rounded-lg bg-ink-50 p-0.5 ring-1 ring-inset ring-ink-200 [scrollbar-width:none] max-md:[mask-image:linear-gradient(to_right,#000_calc(100%-24px),transparent)] [&::-webkit-scrollbar]:hidden">
               {TABS.map((t) => (
                 <button
                   key={t.id}
@@ -70,7 +70,7 @@ export default function App() {
                     setTab(t.id);
                     setOpenRecord(null);
                   }}
-                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150 ${
+                  className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150 ${
                     tab === t.id
                       ? "bg-ink-0 text-ink-1200 shadow-[0_1px_2px_hsl(200_11%_11%_/_0.06)]"
                       : "text-ink-700 hover:text-ink-1200"
@@ -81,9 +81,11 @@ export default function App() {
               ))}
             </nav>
 
-            <Button onClick={rerun} disabled={running}>
-              {running ? "Running…" : "Run again"}
-            </Button>
+            <span className="shrink-0">
+              <Button onClick={rerun} disabled={running}>
+                {running ? "Running…" : "Run again"}
+              </Button>
+            </span>
           </div>
         </div>
       </header>
