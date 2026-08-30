@@ -29,6 +29,10 @@ out/
 # The regression baseline is deliberately tracked.
 !**/tests/frozen_decisions.json
 
+# Installed agent tooling. 149 files of someone else's scripts, reinstalled
+# with `npx impeccable install` - not ours to vendor.
+.claude/
+
 # OS and editors
 .DS_Store
 .idea/

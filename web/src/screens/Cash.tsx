@@ -1,13 +1,14 @@
 import { api } from "../api";
-import { Card, CardHead, Loading, Problem, Stat } from "../components/ui";
+import { Bar, Card, CardHead, Loading, Problem, Stat } from "../components/ui";
 import { useApi } from "../useApi";
 
 /**
- * The second half of the track title, without a forecasting agent.
+ * Where the money stands, once the matching has run.
  *
- * Four numbers that fall out of data reconciliation already produced. The
- * interesting one is Uncertain: money the business cannot currently account
- * for, which no spreadsheet shows.
+ * The pair that matters is "Not paid yet" against "Paid, needs your OK".
+ * Both are open invoices, but one is chased with the customer and the other
+ * is cleared at this desk. An aging report lumps them together and hides
+ * which is which.
  */
 export function Cash() {
   const { data, error } = useApi(() => api.cash());
@@ -20,39 +21,85 @@ export function Cash() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight text-slate-900">Cash position</h1>
-        <p className="mt-1 text-sm text-slate-600">As of {data.as_of}, straight from the ledger.</p>
+        <h1 className="text-xl font-semibold tracking-tight">Cash</h1>
+        <p className="mt-1.5 text-sm text-ink-700">
+          As things stand on {data.as_of}, straight from the ledger. Nothing here is a forecast.
+        </p>
       </div>
 
       <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Confirmed in" value={data.confirmed_in.display} note="matched and signed off" tone="good" />
-        <Stat label="Still owed" value={data.still_owed.display} note="invoices with nothing against them" />
-        <Stat label="In flight" value={data.in_flight.display} note="gateway sent, bank has not shown it" />
-        <Stat label="Uncertain" value={data.uncertain.display} note={data.uncertain_note} tone="warn" />
+        <Stat
+          label="In the bank"
+          value={data.confirmed_in.display}
+          note="Matched to an invoice and signed off"
+          tone="good"
+        />
+        <Stat
+          label="Not paid yet"
+          value={data.still_owed.display}
+          note="No payment turned up that covers these. Chase the customer."
+          tone="bad"
+        />
+        <Stat
+          label="Paid, needs your OK"
+          value={data.uncertain.display}
+          note="The money is there. We would not close it without you."
+          tone="warn"
+        />
+        <Stat
+          label="Deducted on the way"
+          value={data.withheld.display}
+          note="Never reached your account"
+        />
       </dl>
 
       <Card>
-        <CardHead title="How old the unpaid money is" note="on what is still owed" />
+        <CardHead
+          title="What was deducted before the money reached you"
+          note="You can claim the TDS back. The gateway fee and its GST are a cost."
+        />
+        <dl className="divide-y divide-ink-100 text-sm">
+          {[
+            ["TDS withheld by customers", data.withheld_split.tds.display, "Claim this back"],
+            ["Gateway fee (MDR)", data.withheld_split.mdr.display, "A cost of collecting"],
+            ["GST on the gateway fee", data.withheld_split.gst.display, "A cost of collecting"],
+          ].map(([label, value, note]) => (
+            <div key={label} className="flex items-baseline justify-between gap-4 px-5 py-3">
+              <div>
+                <dt className="text-ink-1200">{label}</dt>
+                <p className="mt-0.5 text-xs text-ink-700">{note}</p>
+              </div>
+              <dd className="tnum whitespace-nowrap font-medium">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </Card>
+
+      <Card>
+        <CardHead
+          title="How old the unpaid invoices are"
+          note={`Every invoice still open, paid or not - ${data.open_total.display} in total.`}
+        />
         <div className="space-y-4 px-5 py-5">
           {data.aging.map((bucket) => (
             <div key={bucket.label}>
-              <div className="flex items-baseline justify-between text-sm">
-                <span className="text-slate-700">{bucket.label}</span>
-                <span className="tabular-nums text-slate-500">
+              <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                <span className="font-medium text-ink-1200">{bucket.label}</span>
+                <span className="tnum text-ink-700">
                   {bucket.count} {bucket.count === 1 ? "invoice" : "invoices"} ·{" "}
-                  <span className="font-medium text-slate-900">{bucket.value.display}</span>
+                  <span className="font-medium text-ink-1200">{bucket.value.display}</span>
                 </span>
               </div>
-              <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className={`h-full rounded-full ${
+              <div className="mt-1.5">
+                <Bar
+                  value={(bucket.value.paise / worst) * 100}
+                  tone={
                     bucket.label === "90+ days"
-                      ? "bg-rose-500"
+                      ? "bad"
                       : bucket.label === "61-90 days"
-                        ? "bg-amber-500"
-                        : "bg-slate-600"
-                  }`}
-                  style={{ width: `${(bucket.value.paise / worst) * 100}%` }}
+                        ? "warn"
+                        : "neutral"
+                  }
                 />
               </div>
             </div>

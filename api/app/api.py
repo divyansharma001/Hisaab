@@ -19,7 +19,7 @@ from app.dataset import Outcome, Split
 from app.evaluate import Metrics, evaluate, load_truth
 from app.intake import load_batch
 from app.memory import build_from_split
-from app.money import fmt
+from app.money import fmt, llm_cost_paise
 from app.pipeline import RunResult, run
 from app.persist import save
 
@@ -81,6 +81,14 @@ def latest_run() -> dict:
         "reason_accuracy": round(metrics.reason_accuracy, 1),
         "missed_exceptions": len(metrics.missed_exceptions),
         "llm_calls": result.llm_calls,
+        "input_tokens": result.input_tokens,
+        "output_tokens": result.output_tokens,
+        "cost": _money(llm_cost_paise(result.input_tokens, result.output_tokens)),
+        "cost_per_1000": _money(
+            llm_cost_paise(result.input_tokens, result.output_tokens)
+            * 1000
+            // max(metrics.total, 1)
+        ),
         "value_settled": _money(metrics.value_auto),
         "value_held": _money(metrics.value_held),
         "outcomes": {o.value: n for o, n in result.by_outcome().items()},
@@ -119,6 +127,53 @@ def exceptions() -> dict:
 
     rows.sort(key=lambda r: -r["amount"]["paise"])
     return {"count": len(rows), "total": _money(metrics.value_held), "exceptions": rows}
+
+
+@router.get("/adjudicated")
+def adjudicated() -> dict:
+    """The records the model was actually asked about.
+
+    Without this the UI has a hole in the middle of its own argument. The
+    exception list only shows what we held, but every record the adjudicator
+    touched this run was one it helped clear - so the single screen that
+    proves the model earns its place was unreachable from the demo.
+
+    These are listed separately rather than mixed into the exception table,
+    because they are not exceptions. They are the opposite.
+    """
+    result, metrics = CACHE.ensure()
+    truth = {j.invoice_id: j for j in metrics.judgements}
+    invoices = load_batch(result.split).invoice_by_id()
+
+    rows = []
+    for decision in result.decisions:
+        if not decision.llm_used:
+            continue
+        invoice = invoices.get(decision.invoice_id)
+        rows.append(
+            {
+                "invoice_id": decision.invoice_id,
+                "counterparty": invoice.name_clean if invoice else "",
+                "amount": _money(decision.amount_paise),
+                "outcome": decision.outcome.value,
+                "score": round(decision.score, 3),
+                "margin": round(decision.margin, 3),
+                "confidence": decision.llm_confidence,
+                "reasoning": decision.llm_reasoning,
+                "rejected": decision.llm_rejected,
+                "correct": truth[decision.invoice_id].correct
+                if decision.invoice_id in truth
+                else None,
+            }
+        )
+
+    rows.sort(key=lambda r: -r["amount"]["paise"])
+    return {
+        "count": len(rows),
+        "of_total": metrics.total,
+        "records": rows,
+        "note": "a recommendation on each; the hard rules still decided",
+    }
 
 
 @router.get("/records/{invoice_id}")
@@ -215,9 +270,19 @@ def cash() -> dict:
         "as_of": position.as_of,
         "confirmed_in": _money(position.confirmed_in_paise),
         "still_owed": _money(position.still_owed_paise),
-        "in_flight": _money(position.in_flight_paise),
         "uncertain": _money(position.uncertain_paise),
-        "uncertain_note": "money the business cannot currently account for",
+        "withheld": _money(position.withheld_paise),
+        "withheld_split": {
+            "mdr": _money(position.mdr_paise),
+            "gst": _money(position.gst_paise),
+            "tds": _money(position.tds_paise),
+        },
+        "still_owed_note": "no payment turned up that covers these",
+        "uncertain_note": "a payment exists, we would not sign it off",
+        "withheld_note": "taken out before the money reached the bank",
+        # The two open buckets together. Sent formatted so the UI never has a
+        # second money formatter that can drift from this one.
+        "open_total": _money(position.still_owed_paise + position.uncertain_paise),
         "aging": [
             {"label": b.label, "count": b.count, "value": _money(b.value_paise)}
             for b in position.aging

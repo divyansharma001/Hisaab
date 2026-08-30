@@ -55,3 +55,17 @@ def fmt(amount_paise: int) -> str:
         digits = ",".join(groups) + "," + tail
 
     return f"{sign}Rs {digits}.{frac:02d}"
+
+
+# gpt-4o-mini list price, in paise per token. Kept here so the ablation table
+# and the API quote the same rate rather than drifting apart.
+RUPEES_PER_USD = 88
+INPUT_PAISE_PER_TOKEN = 0.15 / 1_000_000 * RUPEES_PER_USD * 100
+OUTPUT_PAISE_PER_TOKEN = 0.60 / 1_000_000 * RUPEES_PER_USD * 100
+
+
+def llm_cost_paise(input_tokens: int, output_tokens: int) -> int:
+    """What a run cost, rounded up to the paise. Rounding up so a reported
+    cost is never lower than the real one."""
+    exact = input_tokens * INPUT_PAISE_PER_TOKEN + output_tokens * OUTPUT_PAISE_PER_TOKEN
+    return int(-(-exact // 1))

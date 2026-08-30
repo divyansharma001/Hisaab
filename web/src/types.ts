@@ -17,6 +17,10 @@ export type RunSummary = {
   reason_accuracy: number;
   missed_exceptions: number;
   llm_calls: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost: Money;
+  cost_per_1000: Money;
   value_settled: Money;
   value_held: Money;
   outcomes: Record<string, number>;
@@ -110,8 +114,32 @@ export type CashPosition = {
   as_of: string;
   confirmed_in: Money;
   still_owed: Money;
-  in_flight: Money;
   uncertain: Money;
+  withheld: Money;
+  withheld_split: { mdr: Money; gst: Money; tds: Money };
+  still_owed_note: string;
   uncertain_note: string;
+  withheld_note: string;
+  open_total: Money;
   aging: { label: string; count: number; value: Money }[];
+};
+
+export type AdjudicatedRow = {
+  invoice_id: string;
+  counterparty: string;
+  amount: Money;
+  outcome: Outcome;
+  score: number;
+  margin: number;
+  confidence: number;
+  reasoning: string;
+  rejected: string | null;
+  correct: boolean | null;
+};
+
+export type AdjudicatedList = {
+  count: number;
+  of_total: number;
+  records: AdjudicatedRow[];
+  note: string;
 };

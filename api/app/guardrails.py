@@ -119,6 +119,15 @@ def check_txn(txn: NormTxn, today: date) -> list[str]:
 # --- routing ---------------------------------------------------------------
 
 
+
+def days_from_due(days: int) -> str:
+    """Say which side of the due date a payment fell on, in words."""
+    if days == 0:
+        return "paid on the due date"
+    side = "after" if days > 0 else "before"
+    return f"{abs(days)} days {side} the due date"
+
+
 def route(score: float, margin: float) -> str:
     """Written exactly once, so two rules can never claim the same record.
 
@@ -222,7 +231,7 @@ def apply(
     # reason anyone can see. Section 18, bug 5.
     days = (best.txn.value_date - best.date_anchor).days
     low, high = DATE_WINDOW_DAYS
-    rule("date window", low <= days <= high, f"{days:+d} days from the due date")
+    rule("date window", low <= days <= high, days_from_due(days))
 
     rule(
         "currency",
@@ -268,10 +277,13 @@ def _conclude(
     conflict: str | None,
     dupes: list[str],
 ) -> tuple[Outcome, Reason, str]:
-    """Which rule actually decided this, and how to say it to a human.
+    """Which check actually decided this, and how to say it to the reviewer.
 
-    Order matters: the first failure listed here is the one the exception list
-    shows, so the most actionable cause has to come first.
+    Order matters: the first failure listed here is the one the queue shows,
+    so the most actionable cause has to come first.
+
+    Every string here is read by a finance person, not by us. It names what
+    happened and what they should do about it, never a score or a threshold.
     """
     failed = {r.name: r for r in rules if not r.passed}
 
@@ -287,7 +299,8 @@ def _conclude(
         return (
             Outcome.REVIEW,
             Reason.DUPLICATE_TRANSACTION,
-            f"{best.id} {failed['not a duplicate'].detail}; both held",
+            f"This payment {failed['not a duplicate'].detail}. "
+            f"We are holding both until you say which one is real.",
         )
 
     # Big enough that a wrong match is a different kind of problem.
@@ -295,40 +308,48 @@ def _conclude(
         return (
             Outcome.REVIEW,
             Reason.VALUE_CEILING,
-            f"{fmt(invoice.amount_paise)} is above the {fmt(VALUE_CEILING_PAISE)} ceiling, "
-            f"so a human signs it off even at score {ranking.score:.2f}",
+            f"We are confident this is the right payment, but "
+            f"{fmt(invoice.amount_paise)} is over the {fmt(VALUE_CEILING_PAISE)} "
+            f"limit, so it needs your sign-off.",
         )
 
     if "known counterparty" in failed:
         return (
             Outcome.REVIEW,
             Reason.NEW_COUNTERPARTY,
-            f"First time settling with {invoice.name_clean}",
+            f"This is one of our first dealings with {invoice.name_clean}, "
+            f"so we would like you to confirm it.",
         )
 
     if "date window" in failed:
-        return Outcome.EXCEPTION, Reason.DATE_OUT_OF_WINDOW, failed["date window"].detail
+        return (
+            Outcome.EXCEPTION,
+            Reason.DATE_OUT_OF_WINDOW,
+            f"The closest payment arrived {failed['date window'].detail}, "
+            f"which is too far out for us to match it on our own.",
+        )
 
     if "amount explained" in failed:
         return (
             Outcome.EXCEPTION,
             Reason.AMOUNT_GAP_UNEXPLAINED,
-            f"Best candidate: {best.amount.basis}",
+            f"The closest payment is {best.id}, but {best.amount.basis}.",
         )
 
     if "margin" in failed:
         return (
             Outcome.AMBIGUOUS,
             Reason.AMBIGUOUS_CANDIDATES,
-            f"Top two candidates are {ranking.margin:.2f} apart, too close to call",
+            "Two payments fit this invoice about equally well, "
+            "so we would rather you chose.",
         )
 
     weakest = min(best.signals.available().items(), key=lambda kv: kv[1], default=("score", 0.0))
     return (
         Outcome.EXCEPTION,
         Reason.BELOW_THRESHOLD,
-        f"Scored {ranking.score:.2f} against a bar of {AUTO_SCORE}; "
-        f"weakest signal was {weakest[0]} at {weakest[1]:.2f}",
+        f"Nothing is clearly wrong, but the evidence is thin - "
+        f"the {weakest[0]} is the weakest part of it.",
     )
 
 
@@ -369,7 +390,7 @@ def score_only(invoice: NormInvoice, ranking: Ranking, best: Scored) -> Verdict:
     return Verdict(
         Outcome.EXCEPTION,
         Reason.BELOW_THRESHOLD,
-        f"Scored {ranking.score:.2f} against a bar of {AUTO_SCORE}; "
-        f"weakest signal was {weakest[0]} at {weakest[1]:.2f}",
+        f"Nothing is clearly wrong, but the evidence is thin - "
+        f"the {weakest[0]} is the weakest part of it.",
         rules,
     )

@@ -99,7 +99,7 @@ def test_an_unknown_split_is_rejected(client):
 def test_cash_position_is_four_numbers_and_an_aging_split(client):
     body = client.get("/api/cash-position").json()
 
-    for key in ("confirmed_in", "still_owed", "in_flight", "uncertain"):
+    for key in ("confirmed_in", "still_owed", "uncertain", "withheld"):
         assert body[key]["paise"] >= 0
         assert body[key]["display"].startswith("Rs ")
 
@@ -108,10 +108,31 @@ def test_cash_position_is_four_numbers_and_an_aging_split(client):
     ]
 
 
-def test_the_aging_buckets_add_up_to_what_is_still_owed(client):
+def test_still_owed_and_uncertain_are_different_questions(client):
+    """They were the same query once, so the panel showed one number twice
+    under two labels. Both must be real, and they must not be the same set."""
+    body = client.get("/api/cash-position").json()
+
+    assert body["still_owed"]["paise"] > 0
+    assert body["uncertain"]["paise"] > 0
+    assert body["still_owed"]["paise"] != body["uncertain"]["paise"]
+
+
+def test_the_aging_buckets_add_up_to_every_open_invoice(client):
+    """Aging covers both open buckets. If a record could fall between them the
+    totals would silently stop matching, so this is the check that catches it."""
     body = client.get("/api/cash-position").json()
     bucketed = sum(b["value"]["paise"] for b in body["aging"])
-    assert bucketed == body["still_owed"]["paise"]
+    assert bucketed == body["still_owed"]["paise"] + body["uncertain"]["paise"]
+
+
+def test_withheld_is_its_own_parts(client):
+    body = client.get("/api/cash-position").json()
+    parts = body["withheld_split"]
+    assert (
+        parts["mdr"]["paise"] + parts["gst"]["paise"] + parts["tds"]["paise"]
+        == body["withheld"]["paise"]
+    )
 
 
 def test_money_never_leaves_the_database_as_a_decimal():
@@ -123,8 +144,11 @@ def test_money_never_leaves_the_database_as_a_decimal():
     for value in (
         position.confirmed_in_paise,
         position.still_owed_paise,
-        position.in_flight_paise,
         position.uncertain_paise,
+        position.withheld_paise,
+        position.mdr_paise,
+        position.gst_paise,
+        position.tds_paise,
     ):
         assert isinstance(value, int), type(value)
     for bucket in position.aging:
@@ -171,3 +195,72 @@ def test_the_snapshot_holds_everything_the_ui_reads():
 
     held = {f"trace_{r['invoice_id']}" for r in payload["exceptions"]["exceptions"]}
     assert held <= set(traces), "an exception row has no trace to open"
+
+
+# --- the records the model touched ------------------------------------------
+
+
+def test_adjudicated_lists_only_records_the_model_saw(client):
+    """The UI had no way to reach a record the adjudicator touched, because
+    every one it touched was auto-approved and the exception list was the only
+    route into the trace screen. The screen that proves the model earns its
+    place was unreachable from the app."""
+    body = client.get("/api/adjudicated").json()
+
+    assert body["count"] == len(body["records"])
+    assert body["of_total"] >= body["count"]
+    for row in body["records"]:
+        assert row["invoice_id"].startswith("INV-")
+        assert 0.0 <= row["confidence"] <= 1.0
+
+
+def test_every_adjudicated_record_opens_in_the_trace_screen(client):
+    """The whole point of the panel is that these are clickable. A row that
+    404s on the way to the trace is worse than no row."""
+    for row in client.get("/api/adjudicated").json()["records"]:
+        trace = client.get(f"/api/records/{row['invoice_id']}")
+        assert trace.status_code == 200, row["invoice_id"]
+        assert trace.json()["adjudicator"]["used"] is True
+
+
+def test_days_from_due_reads_as_english():
+    """A reviewer should not have to work out what a minus sign means."""
+    from app.guardrails import days_from_due
+
+    assert days_from_due(0) == "paid on the due date"
+    assert days_from_due(5) == "5 days after the due date"
+    assert days_from_due(-56) == "56 days before the due date"
+    assert "-" not in days_from_due(-56)
+
+
+# --- the offline snapshot has to match the live shape ----------------------
+
+
+def test_snapshot_has_every_field_the_live_api_returns(client):
+    """The snapshot is a second copy of the API contract, and it drifts.
+
+    Adding a field to an endpoint and forgetting to rebuild the file leaves
+    the UI crashing the moment it falls back - which is exactly when it is
+    least affordable. Comparing keys here turns that into a failed test
+    instead of a blank screen.
+    """
+    import json
+    from pathlib import Path
+
+    snapshot_file = Path("/web/public/results.json")
+    if not snapshot_file.exists():
+        pytest.skip("no snapshot built; run snapshot.py")
+
+    saved = json.loads(snapshot_file.read_text())
+
+    for key, path in (
+        ("summary", "/api/runs/latest"),
+        ("exceptions", "/api/exceptions"),
+        ("eval", "/api/eval"),
+        ("cash", "/api/cash-position"),
+        ("adjudicated", "/api/adjudicated"),
+    ):
+        assert key in saved, f"snapshot is missing {key}"
+        live = client.get(path).json()
+        missing = set(live) - set(saved[key])
+        assert not missing, f"snapshot {key} is missing {sorted(missing)}; rebuild it"

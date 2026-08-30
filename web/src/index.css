@@ -1,1 +1,139 @@
 @import "tailwindcss";
+/* Inter, self-hosted through the package rather than a CDN, so the app still
+   renders correctly with no network. Blade's text family is Inter. */
+@import "@fontsource-variable/inter";
+
+/*
+ * Razorpay Blade foundations, taken from the real token source rather than
+ * eyeballed:
+ * https://github.com/razorpay/blade/blob/master/packages/blade/src/tokens/global/colors.ts
+ *
+ * Blade stores these as HSL, so they stay HSL here. The neutral ramp is
+ * blueGrayLight, which is very slightly cool - that coolness is the reason
+ * the page does not look like default Tailwind grey.
+ */
+@theme {
+  /* azure - the Razorpay brand ramp */
+  --color-brand-50: hsl(217 100% 98%);
+  --color-brand-100: hsl(218 100% 92%);
+  --color-brand-200: hsl(218 100% 83%);
+  --color-brand-400: hsl(218 100% 63%);
+  --color-brand-500: hsl(218 89% 51%);
+  --color-brand-600: hsl(218 87% 43%);
+  --color-brand-700: hsl(218 89% 35%);
+  --color-brand-900: hsl(218 90% 20%);
+
+  /* emerald - settled, confirmed, money in */
+  --color-good-50: hsl(150 39% 93%);
+  --color-good-100: hsl(149 38% 86%);
+  --color-good-500: hsl(153 100% 30%);
+  --color-good-600: hsl(150 100% 28%);
+  --color-good-700: hsl(150 100% 23%);
+
+  /* crimson - the amount does not add up */
+  --color-bad-50: hsl(5 75% 97%);
+  --color-bad-100: hsl(5 75% 94%);
+  --color-bad-500: hsl(5 73% 53%);
+  --color-bad-600: hsl(4 85% 44%);
+  --color-bad-700: hsl(4 85% 36%);
+
+  /* cider - needs a person's eye */
+  --color-warn-50: hsl(23 100% 97%);
+  --color-warn-100: hsl(24 100% 92%);
+  --color-warn-500: hsl(23 92% 53%);
+  --color-warn-600: hsl(25 100% 44%);
+  --color-warn-700: hsl(25 100% 39%);
+
+  /* sapphire - informational, and anything the assistant touched */
+  --color-info-50: hsl(198 85% 95%);
+  --color-info-100: hsl(199 82% 89%);
+  --color-info-500: hsl(198 100% 45%);
+  --color-info-600: hsl(200 100% 41%);
+  --color-info-700: hsl(200 100% 33%);
+
+  /* blueGrayLight - every surface, border and piece of text */
+  --color-ink-0: hsl(0 0% 100%);
+  --color-ink-50: hsl(210 12% 97%);
+  --color-ink-100: hsl(206 10% 94%);
+  --color-ink-200: hsl(204 8% 88%);
+  --color-ink-300: hsl(203 8% 80%);
+  --color-ink-400: hsl(205 8% 71%);
+  --color-ink-500: hsl(203 8% 62%);
+  --color-ink-600: hsl(202 8% 52%);
+  --color-ink-700: hsl(204 9% 42%);
+  --color-ink-800: hsl(206 9% 34%);
+  --color-ink-900: hsl(206 10% 29%);
+  --color-ink-1100: hsl(200 10% 18%);
+  --color-ink-1200: hsl(200 11% 11%);
+
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --font-mono: ui-monospace, Menlo, "SF Mono", "Roboto Mono", monospace;
+
+  --radius-card: 8px;
+  --shadow-card: 0 1px 2px hsl(200 11% 11% / 0.04);
+}
+
+/*
+ * The parts we did not draw still carry the design. Browser defaults for
+ * selection, the caret, scrollbars and focus rings belong to no design
+ * system, so they are themed from the palette here.
+ */
+::selection {
+  background: var(--color-brand-100);
+  color: var(--color-ink-1200);
+}
+
+html {
+  scrollbar-color: var(--color-ink-300) transparent;
+  caret-color: var(--color-brand-600);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--color-ink-300);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-400);
+  background-clip: content-box;
+}
+
+/* One focus ring for the whole app, so no control invents its own. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--color-ink-50);
+  color: var(--color-ink-1200);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Every number in this app is money or a count, and both read better with
+   figures that line up down a column. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

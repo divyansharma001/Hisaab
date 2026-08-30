@@ -1,0 +1,157 @@
+---
+name: Hisaab
+description: A reconciliation desk built on Razorpay's Blade foundations
+colors:
+  brand: "hsl(218 89% 51%)"
+  brandStrong: "hsl(218 87% 43%)"
+  positive: "hsl(153 100% 30%)"
+  negative: "hsl(4 85% 44%)"
+  notice: "hsl(25 100% 44%)"
+  information: "hsl(200 100% 41%)"
+  surface: "hsl(0 0% 100%)"
+  surfaceSunken: "hsl(210 12% 97%)"
+  border: "hsl(204 8% 88%)"
+  textPrimary: "hsl(200 11% 11%)"
+  textMuted: "hsl(204 9% 42%)"
+---
+
+# Design System: Hisaab
+
+## Overview
+
+**Creative North Star: "The passbook, not the dashboard"**
+
+Hisaab is a desk, not a report.
+The person using it opens it to work through a pile, one record at a time, and closes it when the pile is empty.
+So the interface behaves like a well-printed bank passbook: quiet paper, ruled lines, numbers that line up down the column, and colour used only where it changes what you do next.
+
+The world is inherited, not invented.
+The user pinned **Razorpay's Blade** design system, so every token here traces to a real Blade value: the azure brand ramp, emerald and crimson and cider for meaning, the blueGray neutral ramp for everything else, and Inter as the single family.
+Nothing is borrowed from Blade's shape and then recoloured to taste.
+
+The density is deliberately high.
+This is Operate mode: a finance person scanning twenty-three rows wants all twenty-three visible, not eight in generous cards.
+Where a marketing surface would breathe, this one rules a line and moves on.
+
+**Key characteristics:**
+- One family, Inter, at four weights. No display face.
+- Colour is semantic only. A green thing means settled; a green thing never means decoration.
+- Every row is one line tall unless its content genuinely wraps.
+- Numbers are tabular everywhere, right-aligned in columns, and never wrap mid-value.
+- Status is always carried by a word, never by colour alone.
+
+## Colors
+
+Blade's ramps, used at their intended semantic roles. Restrained: the brand azure appears on primary actions and the current tab, nowhere else.
+
+### Primary
+- **Razorpay Azure** (hsl(218 89% 51%), Blade `azure.500`): the primary button, the active tab, focus rings, and the selected row marker. Nothing decorative.
+- **Azure Strong** (hsl(218 87% 43%), Blade `azure.600`): hover and pressed states for the above.
+- **Azure Wash** (hsl(217 100% 98%), Blade `azure.50`): the selected-row tint and the assistant panel's ground.
+
+### Secondary
+- **Emerald** (hsl(153 100% 30%), Blade `emerald.500`): money confirmed, matches that stand, "settled" states.
+- **Crimson** (hsl(4 85% 44%), Blade `crimson.600`): a payment that does not add up, and only that. Never used for "needs attention".
+- **Cider** (hsl(25 100% 44%), Blade `cider.600`): needs a person's eye. The most common non-green state, so it must not read as an alarm.
+- **Sapphire** (hsl(200 100% 41%), Blade `sapphire.600`): informational, and the marker on anything the assistant looked at.
+
+### Neutral
+Blade `blueGrayLight`, which is very slightly cool. That coolness is the whole reason the page does not look like default Tailwind.
+- **Paper** (hsl(0 0% 100%), `0`): cards, table bodies, the header.
+- **Desk** (hsl(210 12% 97%), near `50`): the page behind the cards, and table header rows.
+- **Rule** (hsl(204 8% 88%), `200`): every border and divider. One value, everywhere.
+- **Ink** (hsl(200 11% 11%), `1200`): primary text and every number that matters.
+- **Pencil** (hsl(204 9% 42%), `700`): labels, captions, secondary text.
+
+### Named Rules
+
+**The Semantic Colour Rule.** A colour appears only where it changes what the user does next. Settled is green because you can stop looking at it. Cider means open this one. If a colour is doing decoration, delete it.
+
+**The Word Rule.** Every state carries its word. Colour is the second signal, never the only one. A user who cannot distinguish emerald from cider must still be able to work the queue.
+
+## Typography
+
+**Display Font:** none. Product UI does not need one.
+**Body Font:** Inter (Blade `fontFamily.text`), with `system-ui, -apple-system, Segoe UI, Arial` behind it.
+**Label/Mono Font:** ui-monospace / Menlo, for identifiers and bank narration only.
+
+**Character:** One neutral, highly legible grotesque doing all the work. Inter's tabular figures are the reason it is here: this interface is mostly numbers in columns, and Inter lines them up without a second family.
+
+### Hierarchy
+- **Page title** (600, 20px, 1.25): the screen's name. One per screen.
+- **Section title** (600, 14px, 1.4): a card's heading.
+- **Body** (400, 14px, 1.55): sentences, explanations, reasons.
+- **Data** (500, 14px, tabular): every amount, count, and rate.
+- **Label** (500, 11px, 0.04em, uppercase): column headers and stat captions only.
+- **Code** (400, 12px, mono): invoice and payment identifiers, raw bank narration.
+
+### Named Rules
+
+**The Tabular Rule.** Anything that is a number uses `font-variant-numeric: tabular-nums` and never wraps mid-value. A rupee amount that breaks across two lines is a defect, not a layout.
+
+**The No-Shouting Rule.** Uppercase is for 11px labels only. A reason shown to a user is a sentence, never a SCREAMING_SNAKE_CASE constant.
+
+## Layout
+
+A single centred column, max 1200px, 24px gutters. No sidebar: there are four destinations, and a top tab bar is the familiar affordance for that.
+
+- The header is sticky. Every screen is taller than the viewport and losing the tabs mid-table is a real failure.
+- Tables sit inside a card, scroll horizontally within their own container, and never make the page scroll sideways.
+- Spacing rhythm is a 4px base: 4, 8, 12, 16, 20, 24, 32, 48. Rows are 12px vertical padding, 20px horizontal.
+- More space above a heading than below it, so a heading belongs to what follows it.
+- Two-column splits are 3:2, not 1:1, so the dense side gets the room it needs.
+
+## Elevation & Depth
+
+Almost flat. This is paper on a desk, not floating glass.
+
+- **Card:** 1px `Rule` border plus `0 1px 2px hsl(200 11% 11% / 0.04)`. The border does the work; the shadow only stops the card dissolving into the desk.
+- **Sticky header:** the same border on its bottom edge, and a solid background. Never translucent - content ghosting through a header is the failure it was fixed for.
+- **No raised buttons, no inner shadows, no glass.** A zero-offset colour halo is decoration and is banned.
+
+## The mark
+
+Two lines entering horizontally, turning through a rounded elbow, and leaving
+as one. An invoice and a payment becoming a single settled thing.
+
+It is deliberately not a letter. The first version was a white **R** on an
+azure square, which is Razorpay's mark, not ours - wrong on a product called
+Hisaab, and wrong in a room where Razorpay is judging.
+
+Two earlier attempts read as an arrow. Angled strokes converging on a point
+are an arrowhead, however they are balanced; the inputs have to arrive
+horizontally for the shape to read as a merge.
+
+## Shapes
+
+- **Radius:** 8px on cards and buttons, 6px on inputs and badges, 4px on bars and chips. Full round only on progress tracks.
+- Consistent across every screen. A button in one place is the same shape as a button in another.
+
+## Components
+
+- **Stat.** A caption, a number, and one line of plain explanation. The explanation is mandatory - a number with no sentence under it is the hero-metric template and is banned.
+- **Card + CardHead.** Every panel. Title, optional one-line note, then content. Never nested.
+- **Status pill.** A word plus its semantic tint, 11px, medium. Four values only: Settled, Needs a look, Doesn't add up, Two invoices.
+- **Reason chip.** A plain-English phrase, neutral ground. Never the raw constant.
+- **Table.** Sticky-free header on `Desk`, 1px rules between rows, hover tint, whole row clickable with a visible pointer.
+- **Bar.** A 6px track for proportions. Semantic fill. Used for aging and outcome splits only.
+- **Empty state.** Teaches the screen: what would appear here and why it is empty. Never "No data".
+- **Skeleton.** Grey blocks in the real layout while a batch runs, never a centred spinner.
+
+Every interactive element ships default, hover, focus-visible, active, and disabled. Focus-visible is a 2px azure ring at 2px offset, everywhere, no exceptions.
+
+## Do's and Don'ts
+
+**Do**
+- Write the reason as a sentence a person could say out loud.
+- Keep the queue first. The screen opens on what needs a person, not on a success rate.
+- Show the arithmetic when explaining an amount: gross, what was deducted, what landed.
+- Let long tables be long. Density is a feature here.
+
+**Don't**
+- Never surface internal vocabulary: adjudicator, straight-through, exception, margin, guardrail, held for a human, reason code, split, heldout. Each has a plain replacement.
+- Never show a raw enum. `AMOUNT_GAP_UNEXPLAINED` is a bug in the copy, not a label.
+- Never let an amount wrap or a monospace ID break at its hyphen.
+- Never use monospace to make something feel technical. It is for identifiers and bank text only.
+- Never put accuracy or answer-key language on the daily screens. A real user has no answer key; that lives in its own area.
+- No emoji or unicode glyphs standing in for icons. Icons are authored SVG at one stroke weight.

@@ -1,0 +1,107 @@
+# Product
+
+<!-- impeccable:product-schema 1 -->
+
+## Platform
+
+web
+
+## Users
+
+The primary user is a **finance operations person at an Indian business** - the person who reconciles incoming payments against open invoices, day after day.
+
+Their situation: money lands in the bank all day, in amounts that rarely equal the invoice.
+A gateway takes MDR and GST on it.
+A customer withholds TDS.
+Three invoices get paid with one transfer.
+One invoice gets paid in two instalments.
+The bank narration is a mangled version of the customer's name.
+
+Their job is to decide, for every invoice, which payment settled it - and to be able to defend that decision later.
+Today that is spreadsheet work, roughly three minutes a record.
+
+A secondary audience evaluates the system at the Razorpay AI Buildathon.
+They are not the design target; the daily screens are built for the finance user, and the evidence they need lives in its own area.
+
+## Product Purpose
+
+Hisaab matches invoices to bank payments, settles what it can prove, and hands back a short, explained list of what it could not.
+
+Success is not "matched everything".
+Success is **never approving a wrong match**, while shrinking the pile a person has to open by hand, and making every decision inspectable.
+
+## Positioning
+
+Most reconciliation tools return a confidence score.
+A score tells you nothing you can act on or defend.
+
+Hisaab returns a **reason and its arithmetic**: this payment is ₹9,764 because the invoice was ₹10,000, MDR took ₹200 and GST on MDR took ₹36.
+The model is asked only when the rules alone cannot separate two candidates, and its answer is a recommendation that hard rules can still overrule.
+That ordering - arithmetic first, model last, rules always final - is the thing a neighbouring product cannot truthfully copy while still calling itself an AI agent.
+
+## Operating Context
+
+- Runs as a batch: a day's bank and gateway lines against the open invoice ledger.
+- Output splits three ways: settled automatically, sent for a person to confirm, or flagged with a reason nobody could resolve.
+- The person works the flagged pile top-down by value, opening one record at a time.
+- Money is Indian: rupees, lakh/crore digit grouping, paise precision, T+2 gateway settlement.
+- Everything runs in Docker. The web app reads a JSON snapshot when the API is unreachable.
+
+## Capabilities and Constraints
+
+**Confirmed functionality**
+- Three matching passes: one payment to one invoice, one payment split across instalments, several payments combined into one settlement.
+- Four signals scored per candidate: reference, amount, name, date. A missing signal shrinks the denominator rather than counting as zero.
+- Settlement arithmetic for MDR, GST on MDR, TDS at 2% and 10%, and batched settlement.
+- Nine hard rules that can hold a record regardless of score.
+- Memory of name aliases and past decisions, which cannot be seeded from the graded set.
+- Cash position: confirmed in, still owed, uncertain, and withheld, plus an aging split.
+
+**Terminology - use in the UI**
+Rupees, invoice, payment, settlement, TDS, MDR, GST, UTR, due date, aging, customer.
+These are the words the user already uses daily.
+
+**Terminology - never surface in the UI**
+Adjudicator, straight-through processing, exception, margin, guardrail, held for a human, false auto-approval, reason code, split, heldout, ablation, blocking pass, renormalisation.
+These are internal engineering words.
+Each needs a plain replacement, not a tooltip.
+
+**Constraints**
+- Money is integer paise everywhere. Never a float.
+- The model is non-deterministic: about one cold run in four, it abstains on a record it usually endorses, so the automated share moves by roughly one record. Wrong approvals stayed at zero across every run measured.
+- The first page load runs a whole batch and takes several seconds.
+
+## Brand Commitments
+
+- Product name: **Hisaab**.
+- The visual language must follow **Razorpay's Blade design system** (binding, set by the user): Inter for text, the azure brand scale, emerald/crimson/cider/sapphire for meaning, and the blueGray neutral ramp.
+- Voice: plain, direct, short. Say the thing once. No jargon and no hedging.
+
+## Evidence on Hand
+
+Real, measured, and reproducible in this repository:
+
+- 85 graded records on a held-out set, 160 generated in total across three splits.
+- Zero wrong automatic approvals across every run measured.
+- About 73% of records settled without a person, 100% outcome accuracy on the best runs and 98.8% on the worst.
+- Cost of roughly ₹0.06 a run, ₹0.70 per 1,000 records, at 3 model calls out of 85 records.
+- 175 passing tests, 28 frozen decisions checked for drift.
+- The model tested on its own: accuracy, self-consistency at temperature 0.7 with the cache bypassed, and refusal quality on cases with no right answer.
+
+There are no real customers, no testimonials, no production deployment, and no pricing.
+All data is synthetic and generated by `api/generate_data.py`.
+Future work must not imply otherwise.
+
+## Product Principles
+
+1. **A reason beats a score.** Every decision shows the arithmetic or the rule that produced it, in words the user already uses.
+2. **Never be confidently wrong.** Holding a record costs minutes. Approving a wrong one costs money and trust. The system fails towards holding.
+3. **Lead with what we could not do.** The unresolved pile is the first thing shown, not the success rate.
+4. **The model is a consultant, not the decider.** It is asked rarely, its answer is labelled a recommendation, and rules can overrule it.
+5. **The daily screens are not the evidence screens.** A person reconciling payments has no answer key; proof of accuracy belongs in its own area.
+
+## Accessibility & Inclusion
+
+- Amounts and their meaning must never be carried by colour alone; every status carries a word.
+- Numeric columns use tabular figures so digits align down a column.
+- Long tables must scroll within their own container rather than the page.

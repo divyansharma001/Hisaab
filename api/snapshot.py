@@ -29,7 +29,7 @@ def main() -> int:
     parser.add_argument("--split", default=Split.HELDOUT.value, choices=[s.value for s in Split])
     args = parser.parse_args()
 
-    from app.api import cash, eval_breakdown, exceptions, latest_run, record
+    from app.api import adjudicated, cash, eval_breakdown, exceptions, latest_run, record
 
     CACHE.refresh(Split(args.split))
     print(f"Ran {CACHE.split.value}, snapshotting")
@@ -39,17 +39,25 @@ def main() -> int:
         "exceptions": exceptions(),
         "eval": eval_breakdown(),
         "cash": cash(),
+        "adjudicated": adjudicated(),
     }
 
+    # Every row the UI can click has to have a trace in here, or the offline
+    # demo dead-ends on the click. That means the held records *and* the ones
+    # the model was asked about, which are auto-approved and so are not in the
+    # held list at all.
     held = [d for d in CACHE.result.decisions if d.outcome is not Outcome.AUTO]
-    for decision in held[:MAX_TRACES]:
+    wanted = held[:MAX_TRACES] + [
+        d for d in CACHE.result.decisions if d.llm_used and d not in held
+    ]
+    for decision in wanted:
         payload[f"trace_{decision.invoice_id}"] = record(decision.invoice_id)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, indent=2))
 
     size = args.out.stat().st_size / 1024
-    print(f"  {len(payload)} entries, {len(held[:MAX_TRACES])} traces, {size:.0f} KB")
+    print(f"  {len(payload)} entries, {len(wanted)} traces, {size:.0f} KB")
     print(f"  {args.out}")
     print("\n  The UI reads this on its own if the API is unreachable.")
     return 0

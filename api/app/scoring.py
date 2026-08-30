@@ -237,7 +237,7 @@ def score_amount(
     string the UI shows, and which pass earned it.
     """
     txn = candidate.txn
-    verdicts = [AmountVerdict(0.0, "amount does not match", Pass.ONE_TO_ONE)]
+    verdicts = [AmountVerdict(0.0, "the amount is nowhere near this invoice", Pass.ONE_TO_ONE)]
 
     if Pass.ONE_TO_ONE in candidate.passes:
         verdicts.append(_score_one_to_one(invoice, txn))
@@ -254,7 +254,7 @@ def _score_one_to_one(invoice: NormInvoice, txn: NormTxn) -> AmountVerdict:
     one = Pass.ONE_TO_ONE
 
     if gap <= TOLERANCE_PAISE:
-        return AmountVerdict(1.0, "exact", one, settlement.NO_DEDUCTION)
+        return AmountVerdict(1.0, "the amount matches to the rupee", one, settlement.NO_DEDUCTION)
 
     explained = settlement.explain(invoice.amount_paise, txn.amount_paise)
     if explained is not None:
@@ -263,10 +263,10 @@ def _score_one_to_one(invoice: NormInvoice, txn: NormTxn) -> AmountVerdict:
 
     pct = gap / invoice.amount_paise
     if pct < 0.01:
-        return AmountVerdict(0.6, f"unexplained gap of {fmt(gap)}", one)
+        return AmountVerdict(0.6, f"{fmt(gap)} of it is unaccounted for", one)
     if pct < 0.05:
-        return AmountVerdict(0.3, f"unexplained gap of {fmt(gap)}", one)
-    return AmountVerdict(0.0, "amount does not match", one)
+        return AmountVerdict(0.3, f"{fmt(gap)} of it is unaccounted for", one)
+    return AmountVerdict(0.0, "the amount is nowhere near this invoice", one)
 
 
 def _score_combined(
@@ -289,7 +289,7 @@ def _score_combined(
                 Pass.COMBINED,
                 members=others,
             )
-    return AmountVerdict(0.0, "amount does not match", Pass.COMBINED)
+    return AmountVerdict(0.0, "the amount is nowhere near this invoice", Pass.COMBINED)
 
 
 def _score_partial(
@@ -310,7 +310,7 @@ def _score_partial(
                 Pass.PARTIAL,
                 members=rest,
             )
-    return AmountVerdict(0.0, "amount does not match", Pass.PARTIAL)
+    return AmountVerdict(0.0, "the amount is nowhere near this invoice", Pass.PARTIAL)
 
 
 # --- putting it together ---------------------------------------------------
