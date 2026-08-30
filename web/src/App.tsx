@@ -52,7 +52,7 @@ export default function App() {
           <div className="flex items-center gap-2.5">
             <Mark />
             <div>
-              <h1 className="text-[15px] font-semibold leading-tight tracking-tight">Hisaab</h1>
+              <h1 className="display text-[17px] leading-tight">Hisaab</h1>
               <p className="text-xs leading-tight text-ink-700">
                 Matches your invoices to the money that came in
               </p>

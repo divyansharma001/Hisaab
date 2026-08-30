@@ -1,5 +1,13 @@
 import { api } from "../api";
-import { Bar, Card, CardHead, Loading, Problem, Stat } from "../components/ui";
+import {
+  Bar,
+  Card,
+  CardHead,
+  Loading,
+  Problem,
+  Stat,
+  StatBand,
+} from "../components/ui";
 import { useApi } from "../useApi";
 import { OUTCOME, OUTCOME_MEANING } from "../words";
 import type { Outcome } from "../types";
@@ -23,13 +31,13 @@ export function Today() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">This batch</h1>
+        <h1 className="display text-2xl">This batch</h1>
         <p className="mt-1.5 text-sm text-ink-700">
           {r.records} invoices checked in {r.seconds} seconds.
         </p>
       </div>
 
-      <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <StatBand>
         <Stat
           label="Closed on their own"
           value={String(settled)}
@@ -53,7 +61,7 @@ export function Today() {
           note="Sitting in the list waiting for you"
           tone="warn"
         />
-      </dl>
+      </StatBand>
 
       <div className="grid gap-4 lg:grid-cols-5">
         <Card className="lg:col-span-3">

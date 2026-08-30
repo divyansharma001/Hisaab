@@ -27,7 +27,7 @@ export function Queue({ onOpen }: { onOpen: (id: string) => void }) {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Waiting for you</h1>
+        <h1 className="display text-2xl">Waiting for you</h1>
         <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-ink-700">
           {data.count} invoices we could not close on our own, worth{" "}
           <span className="tnum font-medium text-ink-1200">{data.total.display}</span> together.

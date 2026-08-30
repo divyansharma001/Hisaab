@@ -41,7 +41,7 @@ const TEXT: Record<Tone, string> = {
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return (
     <div
-      className={`rounded-[8px] border border-ink-200 bg-ink-0 shadow-[0_1px_2px_hsl(200_11%_11%_/_0.04)] ${className}`}
+      className={`rounded-[--radius-card] border border-ink-200 bg-ink-0 shadow-[--shadow-card] ${className}`}
     >
       {children}
     </div>
@@ -67,9 +67,27 @@ export function Label({ children }: { children: ReactNode }) {
 }
 
 /**
+ * The four headline numbers, as one banded surface rather than four tiles.
+ *
+ * Four floating boxes of one number each is the hero-metric template, and
+ * three screens were stacking it. Ruled columns inside a single card read the
+ * way a ledger does and stop the page being a wall of identical rectangles.
+ *
+ * Banded only where all four fit on one line. Below that it stacks and the
+ * rules run horizontally, because `divide-x` on a two-row grid draws a border
+ * down the left of the third cell, which is nonsense.
+ */
+export function StatBand({ children }: { children: ReactNode }) {
+  return (
+    <Card className="grid divide-y divide-ink-200 lg:grid-cols-4 lg:divide-x lg:divide-y-0">
+      {children}
+    </Card>
+  );
+}
+
+/**
  * A number with its caption and, always, a sentence saying what it means.
- * A bare big number is the hero-metric template; the sentence is what makes
- * it useful to someone who did not build this.
+ * A bare big number says nothing to someone who did not build this.
  */
 export function Stat({
   label,
@@ -83,13 +101,13 @@ export function Stat({
   tone?: Tone;
 }) {
   return (
-    <Card className="px-5 py-4">
+    <div className="px-5 py-4">
       <dt>
         <Label>{label}</Label>
       </dt>
       <dd className={`tnum mt-2 text-2xl font-semibold tracking-tight ${TEXT[tone]}`}>{value}</dd>
       <p className="mt-1.5 text-xs leading-relaxed text-ink-700">{note}</p>
-    </Card>
+    </div>
   );
 }
 

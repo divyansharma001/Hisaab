@@ -1,7 +1,10 @@
 @import "tailwindcss";
-/* Inter, self-hosted through the package rather than a CDN, so the app still
-   renders correctly with no network. Blade's text family is Inter. */
+/* Blade's real pairing, both self-hosted so the app renders correctly with no
+   network: Inter for text, TASA Orbiter for headings. The heading face was
+   skipped the first time on the belief it was not packaged - it is, and the
+   product looked generic without it. */
 @import "@fontsource-variable/inter";
+@import "@fontsource-variable/tasa-orbiter";
 
 /*
  * Razorpay Blade foundations, taken from the real token source rather than
@@ -70,11 +73,14 @@
   --color-ink-1100: hsl(200 10% 18%);
   --color-ink-1200: hsl(200 11% 11%);
 
-  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --font-sans: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+  --font-display: "TASA Orbiter Variable", "TASA Orbiter", "Inter Variable", Georgia, serif;
   --font-mono: ui-monospace, Menlo, "SF Mono", "Roboto Mono", monospace;
 
-  --radius-card: 8px;
-  --shadow-card: 0 1px 2px hsl(200 11% 11% / 0.04);
+  /* Blade border.radius.medium and elevation.onLight.lowRaised, rather than
+     the values I guessed at. */
+  --radius-card: 12px;
+  --shadow-card: 0px 2px 4px 0px hsla(200, 10%, 18%, 0.06);
 }
 
 /*
@@ -125,6 +131,14 @@ body {
   background: var(--color-ink-50);
   color: var(--color-ink-1200);
   -webkit-font-smoothing: antialiased;
+}
+
+/* Headings only. Product UI does not need a display face for labels, buttons
+   or data - TASA Orbiter carries the screen titles and nothing else. */
+.display {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.015em;
 }
 
 /* Every number in this app is money or a count, and both read better with

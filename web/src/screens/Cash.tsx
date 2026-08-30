@@ -1,5 +1,13 @@
 import { api } from "../api";
-import { Bar, Card, CardHead, Loading, Problem, Stat } from "../components/ui";
+import {
+  Bar,
+  Card,
+  CardHead,
+  Loading,
+  Problem,
+  Stat,
+  StatBand,
+} from "../components/ui";
 import { useApi } from "../useApi";
 
 /**
@@ -21,13 +29,13 @@ export function Cash() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">Cash</h1>
+        <h1 className="display text-2xl">Cash</h1>
         <p className="mt-1.5 text-sm text-ink-700">
           As things stand on {data.as_of}, straight from the ledger. Nothing here is a forecast.
         </p>
       </div>
 
-      <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <StatBand>
         <Stat
           label="In the bank"
           value={data.confirmed_in.display}
@@ -51,7 +59,7 @@ export function Cash() {
           value={data.withheld.display}
           note="Never reached your account"
         />
-      </dl>
+      </StatBand>
 
       <Card>
         <CardHead

@@ -71,11 +71,15 @@ Blade `blueGrayLight`, which is very slightly cool. That coolness is the whole r
 
 ## Typography
 
-**Display Font:** none. Product UI does not need one.
+**Display Font:** TASA Orbiter (Blade `fontFamily.heading`), self-hosted.
 **Body Font:** Inter (Blade `fontFamily.text`), with `system-ui, -apple-system, Segoe UI, Arial` behind it.
 **Label/Mono Font:** ui-monospace / Menlo, for identifiers and bank narration only.
 
-**Character:** One neutral, highly legible grotesque doing all the work. Inter's tabular figures are the reason it is here: this interface is mostly numbers in columns, and Inter lines them up without a second family.
+**Character:** Blade's own pairing. TASA Orbiter is a warmer, more geometric face with real personality in its letterforms; Inter is the neutral workhorse under it. The contrast is what stops the product reading as a default Tailwind page.
+
+The first build skipped the display face on the belief it was not packaged. It is - `@fontsource-variable/tasa-orbiter` - and the pages looked anonymous without it.
+
+**Where the display face is allowed:** the product name and the one page title per screen. Nothing else. Card headings, labels, buttons and every number stay in Inter, because Inter's tabular figures are why it is here and this interface is mostly numbers in columns.
 
 ### Hierarchy
 - **Page title** (600, 20px, 1.25): the screen's name. One per screen.
@@ -113,7 +117,7 @@ two lines each turned a 36px bar into a 100px block.
 
 Almost flat. This is paper on a desk, not floating glass.
 
-- **Card:** 1px `Rule` border plus `0 1px 2px hsl(200 11% 11% / 0.04)`. The border does the work; the shadow only stops the card dissolving into the desk.
+- **Card:** 1px `Rule` border plus Blade `elevation.onLight.lowRaised`, `0px 2px 4px 0px hsla(200, 10%, 18%, 0.06)`. The border does the work; the shadow only stops the card dissolving into the desk. Both live as `--shadow-card` and `--radius-card` so no component re-guesses them.
 - **Sticky header:** the same border on its bottom edge, and a solid background. Never translucent - content ghosting through a header is the failure it was fixed for.
 - **No raised buttons, no inner shadows, no glass.** A zero-offset colour halo is decoration and is banned.
 
@@ -132,12 +136,13 @@ horizontally for the shape to read as a merge.
 
 ## Shapes
 
-- **Radius:** 8px on cards, 6px on buttons, inputs, pills and chips. Full round on progress tracks.
+- **Radius:** 12px on cards - Blade `border.radius.medium` - and 6px on buttons, inputs, pills and chips. Full round on progress tracks.
 - Consistent across every screen. A button in one place is the same shape as a button in another.
 
 ## Components
 
-- **Stat.** A caption, a number, and one line of plain explanation. The explanation is mandatory - a number with no sentence under it is the hero-metric template and is banned.
+- **Stat band.** The four headline numbers live in **one** card with ruled columns, not four floating tiles. Four boxes of one number each is the hero-metric template, and three screens were stacking it; ruled columns read the way a ledger does. Banded only where all four fit on a line - below that it stacks and the rules turn horizontal, because `divide-x` on a two-row grid draws a border down the left of the third cell.
+- **Stat.** A caption, a number, and one line of plain explanation. The explanation is mandatory - a number with no sentence under it says nothing to someone who did not build this.
 - **Card + CardHead.** Every panel. Title, optional one-line note, then content. Never nested.
 - **Status pill.** A word plus its semantic tint, 11px, medium. Four values only: Settled, Needs sign-off, Not matched, Unclear. The warn tint uses cider 800 rather than 700, because 700 measured 4.22:1 on its own ground and 11px text needs 4.5.
 - **Reason chip.** A plain-English phrase, neutral ground. Never the raw constant.

@@ -8,6 +8,7 @@ import {
   PanelSkeleton,
   Problem,
   Stat,
+  StatBand,
 } from "../components/ui";
 import { useApi } from "../useApi";
 import type {
@@ -42,7 +43,7 @@ export function Evidence() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">How well it works</h1>
+        <h1 className="display text-2xl">How well it works</h1>
         <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-ink-700">
           These {r.records} invoices were built with a known right answer, then held back while the
           system was tuned. Nothing here was used to teach it. This is the only place we compare
@@ -50,7 +51,7 @@ export function Evidence() {
         </p>
       </div>
 
-      <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <StatBand>
         <Stat
           label="Closed the wrong thing"
           value={String(r.false_auto_approvals)}
@@ -77,7 +78,7 @@ export function Evidence() {
           note="Invoices we closed that should have been held back"
           tone={r.missed_exceptions === 0 ? "good" : "bad"}
         />
-      </dl>
+      </StatBand>
 
       <Card>
         <CardHead
