@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { api } from "../api";
 import {
   Bar,
+  Button,
   Card,
   CardHead,
   Loading,
@@ -10,7 +12,7 @@ import {
   Tick,
 } from "../components/ui";
 import { useApi } from "../useApi";
-import type { Signals } from "../types";
+import type { AskAnswer, Signals } from "../types";
 import {
   asSentence,
   checkText,
@@ -211,6 +213,107 @@ export function Record({ id, onBack }: { id: string; onBack: () => void }) {
           )}
         </div>
       </Card>
+
+      <Ask invoiceId={invoice.id} />
     </div>
+  );
+}
+
+/**
+ * Ask a question about this invoice. Plan section 19.4.
+ *
+ * The numbers are fetched from the ledger before the model sees the question,
+ * and the answer is checked back against them. A rupee figure we did not
+ * supply means it did arithmetic, and we show the ledger instead.
+ */
+function Ask({ invoiceId }: { invoiceId: string }) {
+  const [question, setQuestion] = useState(`Why did we receive this much for ${invoiceId}?`);
+  const [answer, setAnswer] = useState<AskAnswer | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [showFacts, setShowFacts] = useState(false);
+
+  async function send() {
+    if (!question.trim() || asking) return;
+    setAsking(true);
+    setFailed(false);
+    try {
+      setAnswer(await api.ask(question));
+    } catch {
+      setFailed(true);
+    } finally {
+      setAsking(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHead
+        title="Ask about this invoice"
+        note="Answered from the ledger. Every figure is one we hold, not one it worked out."
+      />
+      <div className="px-5 py-4">
+        <div className="flex flex-wrap gap-2">
+          <input
+            value={question}
+            onChange={(e) => setQuestion(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && send()}
+            placeholder={`Why did we receive this much for ${invoiceId}?`}
+            className="min-w-0 flex-1 rounded-md border border-ink-200 bg-ink-0 px-3 py-1.5 text-sm text-ink-1200 placeholder:text-ink-500 focus:border-brand-500"
+          />
+          <Button onClick={send} disabled={asking || !question.trim()}>
+            {asking ? "Asking…" : "Ask"}
+          </Button>
+        </div>
+
+        {failed && (
+          <p className="mt-3 text-sm text-bad-700">
+            Could not reach the service. Try again once it is back.
+          </p>
+        )}
+
+        {answer && (
+          <div className="mt-4">
+            <p className="max-w-3xl text-sm leading-relaxed text-ink-1200">{answer.answer}</p>
+
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-ink-700">
+              {answer.rejected?.startsWith("INVENTED_AMOUNTS") ? (
+                <span className="rounded-md bg-warn-50 px-2 py-0.5 font-medium text-warn-700 ring-1 ring-inset ring-warn-600/20">
+                  It used a figure we did not give it, so we are showing the ledger instead
+                </span>
+              ) : answer.used_model ? (
+                <span>Written by the assistant from {answer.facts.length} facts we hold</span>
+              ) : (
+                <span>Straight from the ledger</span>
+              )}
+              {answer.used_model && <span>· {answer.cost.display}</span>}
+              {answer.facts.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowFacts((v) => !v)}
+                  className="font-medium text-brand-600 hover:text-brand-700"
+                >
+                  {showFacts ? "Hide what it was given" : "Show what it was given"}
+                </button>
+              )}
+            </div>
+
+            {showFacts && (
+              <dl className="mt-3 divide-y divide-ink-100 rounded-md bg-ink-50 px-4 ring-1 ring-inset ring-ink-200">
+                {answer.facts.map((fact) => {
+                  const [label, ...rest] = fact.split(": ");
+                  return (
+                    <div key={fact} className="flex flex-wrap justify-between gap-3 py-2 text-xs">
+                      <dt className="text-ink-700">{label}</dt>
+                      <dd className="tnum font-medium text-ink-1200">{rest.join(": ")}</dd>
+                    </div>
+                  );
+                })}
+              </dl>
+            )}
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }

@@ -21,6 +21,8 @@ from app.intake import load_batch
 from app.memory import build_from_split
 from app.money import fmt, llm_cost_paise
 from app.pipeline import RunResult, run
+from app.qa import ask
+from app.thresholds import BARS, both_curves
 from app.persist import save
 
 router = APIRouter(prefix="/api")
@@ -311,6 +313,80 @@ def eval_breakdown() -> dict:
         "scenarios": scenarios,
         "reason_accuracy": round(metrics.reason_accuracy, 1),
         "outcome_accuracy": round(metrics.outcome_accuracy, 1),
+    }
+
+
+@router.get("/thresholds")
+def thresholds() -> dict:
+    """Where the bar could sit, and what it actually buys. Plan section 19.6.
+
+    Two curves. The top one is the system as shipped; the bottom is the same
+    sweep with the nine rules switched off. The plan expected the bar to be
+    the safety mechanism - it is not, and the gap between these lines is why.
+    Section 18, bug 14.
+
+    Run without the assistant, so the curve is repeatable and free.
+    """
+    curves = both_curves()
+
+    def rows(points):
+        return [
+            {
+                "bar": p.bar,
+                "closed": p.closed_on_their_own,
+                "wrong": p.wrong,
+                "is_current": p.is_current,
+            }
+            for p in points
+        ]
+
+    guarded = rows(curves["with_rules"])
+    bare = rows(curves["score_only"])
+    current = next((r for r in guarded if r["is_current"]), None)
+    same_bar = next((r for r in bare if r["is_current"]), None)
+
+    return {
+        "with_rules": guarded,
+        "score_only": bare,
+        "current_bar": current["bar"] if current else None,
+        "cost_of_the_rules": {
+            "automation_given_up": round(
+                (same_bar["closed"] - current["closed"]), 1
+            )
+            if current and same_bar
+            else None,
+            "wrong_approvals_prevented": same_bar["wrong"] if same_bar else None,
+        },
+        "finding": (
+            "The score bar is not what keeps this safe. With the rules on, no bar "
+            "between 0.30 and 0.98 produced a wrong approval. With only the score "
+            "bar, the same batch gets eleven wrong."
+        ),
+    }
+
+
+@router.post("/ask")
+def ask_question(body: dict) -> dict:
+    """Settlement Q&A. Plan section 19.4.
+
+    Answers "why did we receive this much for INV-0053?" from the ledger.
+    Every number is fetched before the model sees the question, and the answer
+    is checked back against those numbers - an amount we did not supply means
+    the model did arithmetic, and we show the ledger instead of its answer.
+    """
+    question = (body or {}).get("question", "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="ask a question")
+
+    answer = ask(question)
+    return {
+        "question": question,
+        "answer": answer.text,
+        "invoice_id": answer.invoice_id,
+        "facts": answer.facts,
+        "used_model": answer.used_model,
+        "rejected": answer.rejected,
+        "cost": _money(llm_cost_paise(answer.input_tokens, answer.output_tokens)),
     }
 
 

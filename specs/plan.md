@@ -1436,8 +1436,9 @@ the usual demo — **we lead with what we couldn't solve.**
 
 ## 18. Pre-build bug sweep
 
-Thirteen bugs found reviewing this plan before implementation. All are fixed above; this is the
-record of what they were, because the same mistakes are easy to reintroduce while coding.
+Thirteen bugs found reviewing this plan before implementation, plus one found by building it.
+All are fixed above; this is the record of what they were, because the same mistakes are easy to
+reintroduce while coding.
 
 ### Critical — would have broken scenarios in our own dataset
 
@@ -1526,6 +1527,20 @@ harness comes before the clever parts. Contradictions surface as unexplained acc
 and without per-scenario numbers you cannot tell a contradiction from a hard case.
 
 ---
+
+**14. The score threshold was credited with safety it does not provide.**
+Section 19.6 predicted the curve would show two wrong approvals at a 0.80 bar and zero at 0.90,
+making 0.90 "where false approvals reach zero".
+Measured on the held-out set, there is not one wrong approval at any bar between 0.30 and 0.98.
+The score bar is not the safety mechanism at all.
+
+Running the same sweep with the nine hard rules switched off shows what is: score-only auto-approves
+82.4% at a 0.90 bar and gets **11 of them wrong**, rising to 18 wrong as the bar drops.
+The rules cost about thirteen points of automation and take wrong approvals from eleven to zero.
+
+The slider was going to be a flat line labelled as a trade-off.
+It now draws both curves, and the gap between them is the actual finding.
+
 
 ## 19. Winning margin — seven additions
 

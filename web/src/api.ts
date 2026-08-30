@@ -1,9 +1,11 @@
 import type {
   AdjudicatedList,
+  AskAnswer,
   CashPosition,
   EvalBreakdown,
   ExceptionList,
   RunSummary,
+  Thresholds,
   Trace,
 } from "./types";
 
@@ -60,7 +62,18 @@ export const api = {
   breakdown: () => get<EvalBreakdown>("/api/eval", "eval"),
   adjudicated: () => get<AdjudicatedList>("/api/adjudicated", "adjudicated"),
   cash: () => get<CashPosition>("/api/cash-position", "cash"),
+  thresholds: () => get<Thresholds>("/api/thresholds", "thresholds"),
   trace: (id: string) => get<Trace>(`/api/records/${id}`, `trace_${id}`),
+  // Asking is a live question, so there is no snapshot to fall back on.
+  ask: async (question: string): Promise<AskAnswer> => {
+    const res = await fetch(`${API_URL}/api/ask`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    });
+    if (!res.ok) throw new Error(`${res.status}`);
+    return res.json();
+  },
   run: async () => {
     const res = await fetch(`${API_URL}/api/runs`, { method: "POST" });
     if (!res.ok) throw new Error(`${res.status}`);

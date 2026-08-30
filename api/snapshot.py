@@ -29,7 +29,15 @@ def main() -> int:
     parser.add_argument("--split", default=Split.HELDOUT.value, choices=[s.value for s in Split])
     args = parser.parse_args()
 
-    from app.api import adjudicated, cash, eval_breakdown, exceptions, latest_run, record
+    from app.api import (
+        adjudicated,
+        cash,
+        eval_breakdown,
+        exceptions,
+        latest_run,
+        record,
+        thresholds,
+    )
 
     CACHE.refresh(Split(args.split))
     print(f"Ran {CACHE.split.value}, snapshotting")
@@ -40,6 +48,7 @@ def main() -> int:
         "eval": eval_breakdown(),
         "cash": cash(),
         "adjudicated": adjudicated(),
+        "thresholds": thresholds(),
     }
 
     # Every row the UI can click has to have a trace in here, or the offline

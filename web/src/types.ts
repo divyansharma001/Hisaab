@@ -143,3 +143,31 @@ export type AdjudicatedList = {
   records: AdjudicatedRow[];
   note: string;
 };
+
+export type AskAnswer = {
+  question: string;
+  answer: string;
+  invoice_id: string | null;
+  facts: string[];
+  used_model: boolean;
+  rejected: string | null;
+  cost: Money;
+};
+
+export type ThresholdPoint = {
+  bar: number;
+  closed: number;
+  wrong: number;
+  is_current: boolean;
+};
+
+export type Thresholds = {
+  with_rules: ThresholdPoint[];
+  score_only: ThresholdPoint[];
+  current_bar: number | null;
+  cost_of_the_rules: {
+    automation_given_up: number | null;
+    wrong_approvals_prevented: number | null;
+  };
+  finding: string;
+};

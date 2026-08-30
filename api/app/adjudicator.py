@@ -46,8 +46,24 @@ class Adjudication(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     reasoning: str = Field(
         min_length=10,
-        description="One or two sentences. Refer to the fields you used by name.",
+        description=(
+            "One or two sentences a finance person would say out loud, in plain "
+            "English. Say what convinced you: the amount adding up once the "
+            "deductions are applied, the customer name matching, the invoice "
+            "number appearing. Never quote our field names or status words like "
+            "EXPLAINED, and never quote a score."
+        ),
     )
+    # This text is shown to the person reviewing the invoice, so it has to be
+    # in their words. The earlier version asked it to name the fields it used
+    # and produced "TXN-0058 has an EXPLAINED amount status", which is our
+    # vocabulary read back to someone who has never seen it.
+    #
+    # Measured against the old wording over twelve cold runs: the old prompt
+    # reached 100% outcome accuracy on four of eight, the new one on none of
+    # four. That is not a difference this many runs can resolve - both sit in
+    # the same 98.8-100% band, and neither produced a wrong approval - so the
+    # readable wording stands.
     evidence_fields: list[str] = Field(
         description="The specific fields that decided it, e.g. counterparty_name, amount, tds_2pct"
     )
