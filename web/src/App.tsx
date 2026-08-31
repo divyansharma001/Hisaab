@@ -6,6 +6,7 @@ import { Evidence } from "./screens/Evidence";
 import { Queue } from "./screens/Queue";
 import { Record } from "./screens/Record";
 import { Today } from "./screens/Today";
+import { TryIt } from "./screens/TryIt";
 
 /**
  * Four destinations and a top tab bar. No router, no state library.
@@ -22,6 +23,7 @@ const TABS = [
   { id: "today", label: "This batch" },
   { id: "cash", label: "Cash" },
   { id: "evidence", label: "How well it works" },
+  { id: "try", label: "Try your own" },
 ] as const;
 
 type Tab = (typeof TABS)[number]["id"];
@@ -100,8 +102,10 @@ export default function App() {
             <Today />
           ) : tab === "cash" ? (
             <Cash />
-          ) : (
+          ) : tab === "evidence" ? (
             <Evidence />
+          ) : (
+            <TryIt />
           )}
         </div>
       </main>

@@ -228,3 +228,46 @@ export type ConfirmResult = {
   also_affected: string[];
   note: string;
 };
+
+export type SandboxInvoice = {
+  id: string;
+  customer: string;
+  amount: Money;
+  invoice_date: string;
+  due_date: string;
+};
+
+export type SandboxPayment = {
+  id: string;
+  bank_text: string;
+  amount: Money;
+  value_date: string;
+};
+
+export type SandboxContents = {
+  invoices: SandboxInvoice[];
+  payments: SandboxPayment[];
+  room_left: number;
+};
+
+export type SandboxResult = {
+  ran: boolean;
+  why?: string;
+  records?: number;
+  settled?: number;
+  held?: number;
+  seconds?: number;
+  note?: string;
+  assumption?: string;
+  results?: {
+    invoice_id: string;
+    customer: string;
+    amount: Money;
+    outcome: Outcome;
+    reason_code: string | null;
+    reason_text: string;
+    matched: { id: string; bank_text: string }[];
+    amount_working: string;
+    score: number;
+  }[];
+};

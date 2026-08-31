@@ -102,17 +102,35 @@ def squash(raw: str) -> str:
     return clean_name(raw).replace(" ", "")
 
 
+# An IFSC code: four letters, a zero, then six more characters. HDFC0001234.
+# It identifies the branch, appears on a large share of real narrations, and
+# says nothing at all about which invoice is being paid.
+IFSC = re.compile(r"^[A-Za-z]{4}0[A-Za-z0-9]{6}$")
+
+
 def looks_like_invoice_ref(ref: str) -> bool:
     """Could this reference be an invoice number, rather than bank plumbing?
 
-    A UTR and an invoice number are both "references", but only one of them
-    says anything about which bill is being paid. `KKBK290665407983` is the
-    bank's own id for the transfer; it is present on every payment and means
-    nothing about the invoice.
+    A UTR, an IFSC code and an invoice number are all "references", but only
+    one of them says anything about which bill is being paid.
+    `KKBK290665407983` is the bank's id for the transfer and `HDFC0001234` is
+    the branch; both are present on payments that have no invoice number at
+    all.
 
-    The two shapes separate cleanly: invoice numbers carry a separator or a
-    short digit run, UTRs are a long unbroken run of digits.
+    Getting this wrong is expensive in a specific way. A reference we cannot
+    read is dropped and its weight is shared out; a reference we read and
+    fail to match scores zero on the heaviest signal there is. So bank
+    plumbing mistaken for an invoice number does not merely fail to help, it
+    actively pushes a good match below the bar.
+
+    Found by someone typing an ordinary narration into the scratch set:
+    `NEFT/BRIGHTMETALS/HDFC0001234` matched on name and amount, TDS explained
+    to the rupee, and still scored 0.39 because the IFSC was treated as an
+    invoice number that did not match. Our own generated data hid it - the
+    codes it writes are long enough to be caught by the digit test below.
     """
+    if IFSC.match(ref):
+        return False
     if any(sep in ref for sep in "-/_"):
         return True
     digits = "".join(ch for ch in ref if ch.isdigit())

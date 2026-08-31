@@ -16,7 +16,7 @@ DROP TYPE IF EXISTS split_name    CASCADE;
 DROP TYPE IF EXISTS decision_kind CASCADE;
 
 -- Three sets, never mixed. Plan section 9.
-CREATE TYPE split_name AS ENUM ('alias_seed', 'tuning', 'heldout');
+CREATE TYPE split_name AS ENUM ('alias_seed', 'tuning', 'heldout', 'sandbox');
 
 -- The three terminal states from the guardrail layer, plus the truth-only
 -- value AMBIGUOUS which says "correct behaviour here is to refuse".

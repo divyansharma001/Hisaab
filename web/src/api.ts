@@ -5,6 +5,8 @@ import type {
   ConfirmResult,
   Learning,
   Mistakes,
+  SandboxContents,
+  SandboxResult,
   CashPosition,
   EvalBreakdown,
   ExceptionList,
@@ -60,6 +62,24 @@ async function get<T>(path: string, snapshotKey: string): Promise<T> {
   }
 }
 
+/**
+ * A live call with no snapshot behind it.
+ *
+ * The API answers a bad entry with a sentence written for the person who
+ * typed it, so that sentence is thrown as the error rather than a status
+ * code.
+ */
+async function json<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const payload = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(payload?.detail ?? `Something went wrong (${res.status})`);
+  return payload as T;
+}
+
 export const api = {
   summary: () => get<RunSummary>("/api/runs/latest", "summary"),
   exceptions: () => get<ExceptionList>("/api/exceptions", "exceptions"),
@@ -71,6 +91,18 @@ export const api = {
   mistakes: () => get<Mistakes>("/api/mistakes", "mistakes"),
   learning: () => get<Learning>("/api/learning", "learning"),
   trace: (id: string) => get<Trace>(`/api/records/${id}`, `trace_${id}`),
+  // The scratch set is live state a visitor is editing, so none of it falls
+  // back to a snapshot.
+  sandbox: {
+    read: async (): Promise<SandboxContents> => json("GET", "/api/sandbox"),
+    addInvoice: (body: Record<string, string>) =>
+      json<SandboxContents>("POST", "/api/sandbox/invoices", body),
+    addPayment: (body: Record<string, string>) =>
+      json<SandboxContents>("POST", "/api/sandbox/payments", body),
+    match: () => json<SandboxResult>("POST", "/api/sandbox/match"),
+    clear: () => json<SandboxContents>("DELETE", "/api/sandbox"),
+  },
+
   // Confirming changes state, so it never falls back to a snapshot.
   confirm: async (invoiceId: string): Promise<ConfirmResult> => {
     const res = await fetch(`${API_URL}/api/confirm/${invoiceId}`, { method: "POST" });

@@ -111,8 +111,8 @@ def build_from_split(split: Split = Split.ALIAS_SEED, database_url: str | None =
     means. What would be cheating is reading the graded set's answers, and
     this function will not load that split.
     """
-    if split is Split.HELDOUT:
-        raise ValueError("memory must never be seeded from the graded set")
+    if split in (Split.HELDOUT, Split.SANDBOX):
+        raise ValueError(f"memory must never be seeded from {split.value}")
 
     url = database_url or get_settings().database_url
     memory = Memory()
@@ -138,8 +138,8 @@ def build_from_split(split: Split = Split.ALIAS_SEED, database_url: str | None =
         # the graded split is excluded here exactly as it is for episodes.
         confirmed = conn.execute(
             """SELECT canonical_name, variant_name, confirmed_count
-               FROM aliases WHERE source_split <> %s""",
-            (Split.HELDOUT.value,),
+               FROM aliases WHERE source_split <> ALL(%s)""",
+            ([Split.HELDOUT.value, Split.SANDBOX.value],),
         ).fetchall()
 
     for canonical, description in rows:

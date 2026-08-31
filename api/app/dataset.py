@@ -11,11 +11,21 @@ from pydantic import BaseModel, Field
 
 
 class Split(StrEnum):
-    """Three sets, never mixed. Plan section 9."""
+    """Three graded sets, never mixed, plus a scratch one. Plan section 9."""
 
     ALIAS_SEED = "alias_seed"   # 30. Fills the alias table. Never scored.
     TUNING = "tuning"           # 45. Grid search and threshold tuning.
     HELDOUT = "heldout"         # 85. The only numbers we report.
+
+    # Whatever a visitor types in to try the matcher on their own figures.
+    # It has no answer key, so it is never scored, never tuned on, and never
+    # allowed to teach memory. It exists so somebody can test the thing
+    # without us pretending their result is evidence of accuracy.
+    SANDBOX = "sandbox"
+
+    @property
+    def is_graded(self) -> bool:
+        return self is Split.HELDOUT
 
 
 class Outcome(StrEnum):

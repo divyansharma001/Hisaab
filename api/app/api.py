@@ -22,6 +22,7 @@ from app.memory import Memory, build_from_split, confirm_match, episode_from
 from app.money import fmt, llm_cost_paise
 from app.pipeline import RunResult, process_batch, run
 from app.qa import ask
+from app import sandbox
 from app.thresholds import BARS, both_curves
 from app.persist import save
 
@@ -343,6 +344,59 @@ ABLATION = [
         "affordable. This is the system without the assistant.",
     ),
 ]
+
+
+# --- the scratch set, for trying it on your own figures --------------------
+#
+# Everything here is filtered on the sandbox split. It cannot read, change or
+# be scored against the graded rows, which sit in the same tables under a
+# different split.
+
+
+@router.get("/sandbox")
+def sandbox_contents() -> dict:
+    return sandbox.contents()
+
+
+@router.post("/sandbox/invoices")
+def sandbox_add_invoice(body: dict) -> dict:
+    b = body or {}
+    try:
+        added = sandbox.add_invoice(
+            customer=b.get("customer", ""),
+            amount=b.get("amount", ""),
+            invoice_date=b.get("invoice_date") or None,
+            due_date=b.get("due_date") or None,
+        )
+    except ValueError as exc:
+        # The message is written for the person who typed it, so it goes
+        # straight through rather than becoming "invalid input".
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    return {"id": added.id, "summary": added.summary, **sandbox.contents()}
+
+
+@router.post("/sandbox/payments")
+def sandbox_add_payment(body: dict) -> dict:
+    b = body or {}
+    try:
+        added = sandbox.add_payment(
+            bank_text=b.get("bank_text", ""),
+            amount=b.get("amount", ""),
+            value_date=b.get("value_date") or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    return {"id": added.id, "summary": added.summary, **sandbox.contents()}
+
+
+@router.post("/sandbox/match")
+def sandbox_match() -> dict:
+    return sandbox.match()
+
+
+@router.delete("/sandbox")
+def sandbox_clear() -> dict:
+    return {**sandbox.clear(), **sandbox.contents()}
 
 
 @router.get("/ablation")

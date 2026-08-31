@@ -257,3 +257,86 @@ def test_mistakes_names_the_records_and_their_direction(client):
         assert body["all_in_one_direction"] == all(
             m["erred_towards"] == "holding it back" for m in body["mistakes"]
         )
+
+
+# --- the scratch set --------------------------------------------------------
+
+
+def test_bank_plumbing_is_not_read_as_an_invoice_number():
+    """An IFSC code is the branch, not the bill.
+
+    Getting this wrong is expensive in a specific way: an unreadable reference
+    is dropped and its weight shared out, but one we read and fail to match
+    scores zero on the heaviest signal. Found by typing an ordinary narration
+    into the scratch set - our generated data writes codes long enough that
+    the digit test caught them, so it never showed up.
+    """
+    from app.names import looks_like_invoice_ref
+
+    for ifsc in ("HDFC0001234", "ICIC0000123", "SBIN0000456", "kkbk0000321"):
+        assert not looks_like_invoice_ref(ifsc), ifsc
+
+    for utr in ("955640968266", "KKBK290665407983"):
+        assert not looks_like_invoice_ref(utr), utr
+
+    for invoice in ("INV-0083", "INV/2026/044", "12345"):
+        assert looks_like_invoice_ref(invoice), invoice
+
+
+def test_a_typed_amount_never_goes_through_a_float():
+    """int(float("1234.35") * 100) is 123434. A reconciliation tool that
+    loses a paise on entry has no business grading anyone's books."""
+    from app.money import parse_amount
+
+    assert parse_amount("1234.35") == 123435
+    assert parse_amount("1,20,500.75") == 12050075
+    assert parse_amount("Rs 9,764.00") == 976400
+    assert parse_amount("0.01") == 1
+
+
+def test_a_typed_amount_says_what_is_wrong_with_it():
+    from app.money import parse_amount
+
+    for bad in ("", "abc", "-5", "0", "1.234"):
+        with pytest.raises(ValueError) as caught:
+            parse_amount(bad)
+        assert str(caught.value), f"{bad!r} rejected with no explanation"
+
+
+def test_the_scratch_set_is_a_split_of_its_own(client):
+    """It must not be scored, tuned on, or able to teach memory."""
+    from app.memory import build_from_split
+
+    assert Split.SANDBOX.is_graded is False
+    with pytest.raises(ValueError):
+        build_from_split(Split.SANDBOX)
+
+
+def test_adding_and_clearing_leaves_the_graded_rows_alone(client):
+    before = client.get("/api/runs/latest").json()["records"]
+
+    client.post("/api/sandbox/invoices", json={"customer": "Test Co", "amount": "1000"})
+    client.post(
+        "/api/sandbox/payments",
+        json={"bank_text": "NEFT/TESTCO/HDFC0001234", "amount": "980"},
+    )
+    listed = client.get("/api/sandbox").json()
+    assert len(listed["invoices"]) >= 1 and len(listed["payments"]) >= 1
+
+    matched = client.post("/api/sandbox/match").json()
+    assert matched["ran"] is True
+    assert "accuracy" not in matched, "a scratch run has no answer key to score"
+
+    client.delete("/api/sandbox")
+    assert client.get("/api/sandbox").json()["invoices"] == []
+    assert client.get("/api/runs/latest").json()["records"] == before
+
+
+def test_a_bad_entry_is_refused_with_a_readable_reason(client):
+    body = client.post("/api/sandbox/invoices", json={"customer": "X", "amount": "1000"})
+    assert body.status_code == 400
+    assert "name" in body.json()["detail"].lower()
+
+    body = client.post("/api/sandbox/invoices", json={"customer": "Real Co", "amount": "lots"})
+    assert body.status_code == 400
+    assert "amount" in body.json()["detail"].lower()

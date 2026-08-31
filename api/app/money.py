@@ -3,7 +3,7 @@
 100 paise = 1 rupee. A rupee amount of 10,000 is 1,000,000 paise.
 """
 
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 PAISE_PER_RUPEE = 100
 
@@ -14,6 +14,41 @@ TOLERANCE_PAISE = 100
 def rupees(amount: int | str) -> int:
     """Whole rupees to paise."""
     return int(amount) * PAISE_PER_RUPEE
+
+
+def parse_amount(text: str) -> int:
+    """A typed rupee amount to integer paise.
+
+    Everything downstream assumes integer paise, so this is the one place a
+    human's "1,20,500.75" becomes 12050075. It goes through Decimal, never
+    float: `int(float("1234.35") * 100)` is 123434, and a reconciliation tool
+    that loses a paise on entry has no business telling anyone their books are
+    wrong.
+
+    Raises ValueError with something a person can act on.
+    """
+    cleaned = (text or "").strip().replace(",", "").replace("\u20b9", "")
+    for prefix in ("Rs.", "Rs", "INR", "rs"):
+        if cleaned.lower().startswith(prefix.lower()):
+            cleaned = cleaned[len(prefix):].strip()
+            break
+
+    if not cleaned:
+        raise ValueError("enter an amount")
+
+    try:
+        amount = Decimal(cleaned)
+    except InvalidOperation:
+        raise ValueError(f"{text!r} is not an amount") from None
+
+    if amount <= 0:
+        raise ValueError("the amount has to be more than zero")
+    if amount.as_tuple().exponent < -2:
+        raise ValueError("amounts go to paise, so at most two decimal places")
+    if amount > Decimal("1e11"):
+        raise ValueError("that amount is implausibly large")
+
+    return int(amount.scaleb(2).to_integral_value(rounding=ROUND_HALF_UP))
 
 
 def pct_of(amount_paise: int, rate: Decimal) -> int:
