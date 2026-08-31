@@ -389,6 +389,30 @@ def sandbox_add_payment(body: dict) -> dict:
     return {"id": added.id, "summary": added.summary, **sandbox.contents()}
 
 
+@router.post("/sandbox/upload")
+def sandbox_upload(body: dict) -> dict:
+    """A pasted or uploaded CSV of invoices or payments.
+
+    One bad row does not lose the file: the good rows are kept and the rest
+    come back with their line number and what was wrong, which is the only
+    version of this anyone can use to fix their data.
+    """
+    b = body or {}
+    try:
+        report = sandbox.upload(text=b.get("csv", ""), kind=b.get("kind", ""))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+
+    return {
+        "added": report.added,
+        "skipped": report.skipped,
+        "ignored": report.ignored,
+        "problems": report.problems,
+        "columns_used": report.columns_used,
+        **sandbox.contents(),
+    }
+
+
 @router.post("/sandbox/match")
 def sandbox_match() -> dict:
     return sandbox.match()

@@ -7,6 +7,7 @@ import type {
   Mistakes,
   SandboxContents,
   SandboxResult,
+  UploadReport,
   CashPosition,
   EvalBreakdown,
   ExceptionList,
@@ -99,6 +100,8 @@ export const api = {
       json<SandboxContents>("POST", "/api/sandbox/invoices", body),
     addPayment: (body: Record<string, string>) =>
       json<SandboxContents>("POST", "/api/sandbox/payments", body),
+    upload: (kind: "invoices" | "payments", csv: string) =>
+      json<UploadReport>("POST", "/api/sandbox/upload", { kind, csv }),
     match: () => json<SandboxResult>("POST", "/api/sandbox/match"),
     clear: () => json<SandboxContents>("DELETE", "/api/sandbox"),
   },

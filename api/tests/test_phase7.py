@@ -340,3 +340,76 @@ def test_a_bad_entry_is_refused_with_a_readable_reason(client):
     body = client.post("/api/sandbox/invoices", json={"customer": "Real Co", "amount": "lots"})
     assert body.status_code == 400
     assert "amount" in body.json()["detail"].lower()
+
+
+# --- bulk upload ------------------------------------------------------------
+
+
+def test_reads_whatever_the_columns_are_called(client):
+    """An accounting export says "Party Name", a bank says "Particulars".
+    Demanding one shape means nobody can use their real file."""
+    client.delete("/api/sandbox")
+    body = client.post("/api/sandbox/upload", json={
+        "kind": "invoices",
+        "csv": 'Party Name,Invoice Amount,Due Date\n'
+               'Sundaram Textiles,"2,40,000",31/08/2026\n'
+               'Kaveri Foods,"98,500.50",31-08-2026\n',
+    }).json()
+
+    assert body["added"] == 2
+    assert body["columns_used"]["customer"] == "Party Name"
+    assert body["columns_used"]["amount"] == "Invoice Amount"
+    # Indian grouping and two date formats, parsed to the paise.
+    assert body["invoices"][1]["amount"]["paise"] == 9850050
+    client.delete("/api/sandbox")
+
+
+def test_one_bad_row_does_not_lose_the_file(client):
+    """Rejecting the whole upload because line 5 is empty is the version of
+    this nobody can use to fix their data."""
+    client.delete("/api/sandbox")
+    body = client.post("/api/sandbox/upload", json={
+        "kind": "invoices",
+        "csv": "customer,amount\nGood Co,1000\n,500\nAlso Good,2000\nBad Co,not a number\n",
+    }).json()
+
+    assert body["added"] == 2
+    assert body["skipped"] == 2
+    assert {p["line"] for p in body["problems"]} == {3, 5}
+    assert all(p["problem"] for p in body["problems"]), "a rejection with no reason"
+    client.delete("/api/sandbox")
+
+
+def test_money_going_out_is_ignored_not_called_broken(client):
+    """A bank statement is mostly debits. Counting them as errors makes an
+    ordinary export look like it is full of them."""
+    client.delete("/api/sandbox")
+    body = client.post("/api/sandbox/upload", json={
+        "kind": "payments",
+        "csv": "Value Date,Particulars,Debit,Credit\n"
+               '31/08/2026,NEFT/ACME/HDFC0001234,,"1,000.00"\n'
+               '30/08/2026,ATM WDL SELF,"20,000.00",\n'
+               ",,,\n",
+    }).json()
+
+    assert body["added"] == 1
+    assert body["ignored"] == 1, "the debit should be ignored, not counted broken"
+    assert body["skipped"] == 0, "a blank line is not an error"
+    client.delete("/api/sandbox")
+
+
+def test_a_file_we_cannot_read_says_which_columns_it_found(client):
+    body = client.post("/api/sandbox/upload", json={
+        "kind": "invoices", "csv": "foo,bar\n1,2\n",
+    })
+    assert body.status_code == 400
+    detail = body.json()["detail"]
+    assert "customer" in detail and "foo" in detail
+
+
+def test_upload_refuses_an_absurd_file(client):
+    body = client.post("/api/sandbox/upload", json={
+        "kind": "invoices", "csv": "customer,amount\n" + "A Co,100\n" * 40000,
+    })
+    assert body.status_code == 400
+    assert "large" in body.json()["detail"]

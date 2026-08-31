@@ -271,3 +271,11 @@ export type SandboxResult = {
     score: number;
   }[];
 };
+
+export type UploadReport = SandboxContents & {
+  added: number;
+  skipped: number;
+  ignored: number;
+  problems: { line: number; problem: string }[];
+  columns_used: Record<string, string>;
+};

@@ -16,9 +16,11 @@ nothing about the matcher.
 
 from __future__ import annotations
 
+import csv
+import io
 import re
-from dataclasses import dataclass
-from datetime import date, timedelta
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
 
 import psycopg
 from psycopg.rows import dict_row
@@ -30,9 +32,12 @@ from app.memory import build_from_split
 from app.money import fmt, parse_amount
 from app.pipeline import process_batch
 
-# Enough to show every behaviour, small enough that nobody can use this as
-# free compute or fill the table.
-MAX_ROWS = 40
+# Enough for a real statement's worth of rows, small enough that nobody can
+# use this as free compute or fill the table.
+MAX_ROWS = 200
+
+# A pasted file bigger than this is not somebody trying the demo.
+MAX_UPLOAD_CHARS = 200_000
 
 NAME_OK = re.compile(r"^[\w .,&()/-]{2,80}$", re.UNICODE)
 
@@ -283,3 +288,173 @@ def match(database_url: str | None = None) -> dict:
             "rule doing its job but tells you nothing about the matching."
         ),
     }
+
+
+# --- bulk upload ------------------------------------------------------------
+#
+# Real CSVs do not agree on anything. An accounting export calls it
+# "Party Name", a bank calls the narration "Particulars", and half of them
+# split money across Debit and Credit columns. Rather than demand one shape,
+# we accept the names people actually have and say clearly which column we
+# read as what.
+
+INVOICE_COLUMNS = {
+    "customer": ("customer", "customername", "name", "party", "partyname",
+                 "counterparty", "client", "clientname", "billedto", "vendor"),
+    "amount": ("amount", "invoiceamount", "total", "totalamount", "value",
+               "amountinr", "grandtotal", "netamount"),
+    "invoice_date": ("invoicedate", "date", "billdate", "raised", "raisedon",
+                     "issuedate", "documentdate"),
+    "due_date": ("duedate", "due", "paymentdue", "dueon", "maturitydate"),
+}
+
+PAYMENT_COLUMNS = {
+    "bank_text": ("narration", "description", "particulars", "details",
+                  "remarks", "banktext", "transactiondetails", "transactionremarks",
+                  "reference", "text"),
+    "amount": ("amount", "credit", "creditamount", "deposit", "depositamt",
+               "amountinr", "creditinr", "receivedamount"),
+    "value_date": ("valuedate", "date", "txndate", "transactiondate",
+                   "posteddate", "postingdate", "bookingdate"),
+}
+
+# Formats a spreadsheet or a bank is likely to hand us, most specific first.
+DATE_FORMATS = (
+    "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y", "%d-%m-%y",
+    "%d %b %Y", "%d-%b-%Y", "%d %B %Y", "%m/%d/%Y",
+)
+
+
+@dataclass
+class Upload:
+    added: int = 0
+    skipped: int = 0
+    ignored: int = 0
+    problems: list[dict] = field(default_factory=list)
+    columns_used: dict[str, str] = field(default_factory=dict)
+
+    def note(self, line: int, problem: str) -> None:
+        self.skipped += 1
+        # Ten is enough for someone to see the pattern; a thousand identical
+        # complaints is just noise.
+        if len(self.problems) < 10:
+            self.problems.append({"line": line, "problem": problem})
+
+
+def _key(header: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", (header or "").lower())
+
+
+def _pick_columns(headers: list[str], wanted: dict) -> dict[str, str]:
+    """Map our field names onto whatever this file calls them."""
+    seen = {_key(h): h for h in headers if h}
+    chosen: dict[str, str] = {}
+    for ours, aliases in wanted.items():
+        for alias in aliases:
+            if alias in seen:
+                chosen[ours] = seen[alias]
+                break
+    return chosen
+
+
+def _flexible_date(value: str) -> date | None:
+    text = (value or "").strip()
+    if not text:
+        return None
+    for fmt_ in DATE_FORMATS:
+        try:
+            return datetime.strptime(text, fmt_).date()
+        except ValueError:
+            continue
+    raise BadEntry(f"{text!r} is not a date we recognise")
+
+
+def upload(text: str, kind: str, database_url: str | None = None) -> Upload:
+    """Take a pasted or uploaded CSV of invoices or payments.
+
+    A single bad row does not lose the file. Every row is tried, the good ones
+    are kept, and the rest come back with their line number and what was wrong
+    with them - which is the only version of this anyone can actually use to
+    fix their data.
+    """
+    if kind not in ("invoices", "payments"):
+        raise BadEntry("say whether these are invoices or payments")
+    if not (text or "").strip():
+        raise BadEntry("paste some rows, or choose a file")
+    if len(text) > MAX_UPLOAD_CHARS:
+        raise BadEntry("that file is too large for a scratch pad")
+
+    # Sniff the delimiter: exports are comma, semicolon or tab depending on
+    # locale, and guessing wrong turns every row into one unreadable column.
+    sample = text[:4096]
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
+    except csv.Error:
+        dialect = csv.excel
+
+    reader = csv.DictReader(io.StringIO(text), dialect=dialect)
+    headers = reader.fieldnames or []
+    wanted = INVOICE_COLUMNS if kind == "invoices" else PAYMENT_COLUMNS
+    columns = _pick_columns(headers, wanted)
+
+    required = ("customer", "amount") if kind == "invoices" else ("bank_text", "amount")
+    missing = [r for r in required if r not in columns]
+    if missing:
+        readable = {"bank_text": "narration", "customer": "customer", "amount": "amount"}
+        raise BadEntry(
+            "could not find a "
+            + " or a ".join(readable[m] for m in missing)
+            + f" column. The file has: {', '.join(h for h in headers if h) or 'no headers'}"
+        )
+
+    report = Upload(columns_used=columns)
+    url = database_url or get_settings().database_url
+
+    for offset, row in enumerate(reader):
+        line = offset + 2  # header is line 1
+
+        # A wholly blank line is a spreadsheet artefact. Test it first, or it
+        # gets counted as money going out and the tally lies.
+        if not any((v or "").strip() for v in row.values()):
+            continue
+
+        # A statement row with nothing in the credit column is money going
+        # out. Counting those as broken rows would make an ordinary bank
+        # export look like it was full of errors.
+        if kind == "payments" and not (row.get(columns["amount"]) or "").strip():
+            report.ignored += 1
+            continue
+
+        try:
+            if kind == "invoices":
+                add_invoice(
+                    customer=row.get(columns["customer"], ""),
+                    amount=row.get(columns["amount"], ""),
+                    invoice_date=_iso(row, columns.get("invoice_date")),
+                    due_date=_iso(row, columns.get("due_date")),
+                    database_url=url,
+                )
+            else:
+                add_payment(
+                    bank_text=row.get(columns["bank_text"], ""),
+                    amount=row.get(columns["amount"], ""),
+                    value_date=_iso(row, columns.get("value_date")),
+                    database_url=url,
+                )
+            report.added += 1
+        except ValueError as exc:
+            report.note(line, str(exc))
+            # Hitting the row cap is not a problem with their data, and
+            # reporting it once per remaining row would bury everything else.
+            if "rows, which is plenty" in str(exc):
+                break
+
+    return report
+
+
+def _iso(row: dict, column: str | None) -> str | None:
+    """One cell as an ISO date string, or None to let the default apply."""
+    if not column:
+        return None
+    parsed = _flexible_date(row.get(column, ""))
+    return parsed.isoformat() if parsed else None
